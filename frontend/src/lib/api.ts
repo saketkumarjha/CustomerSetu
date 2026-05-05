@@ -1,9 +1,12 @@
 /**
  * API client — all calls to the FastAPI backend go through here.
- * Vite proxy forwards /api/* to http://localhost:8000.
+ * Dev: Vite proxy forwards /api/* → http://localhost:8000 (vite.config.ts)
+ * Prod: VITE_API_BASE_URL points directly to the Railway/Render backend URL
  */
 
 const API_KEY = (import.meta.env.VITE_API_KEY as string) || 'sk_my_super_secret_key_123'
+// Empty string in dev (proxy handles it). Full URL in prod e.g. https://xxx.railway.app
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || ''
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return { 'X-API-Key': API_KEY, ...extra }
@@ -19,7 +22,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(path, { headers: authHeaders() })
+  const res = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() })
   return handleResponse<T>(res)
 }
 
@@ -28,7 +31,7 @@ export async function apiPost<T>(
   body?: unknown,
   extra: Record<string, string> = {},
 ): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json', ...extra }),
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -41,7 +44,7 @@ export async function apiPostForm<T>(
   formData: FormData,
   extra: Record<string, string> = {},
 ): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
     headers: authHeaders(extra),
     body: formData,
@@ -51,7 +54,7 @@ export async function apiPostForm<T>(
 
 /** EventSource for SSE — passes API key as query param (backend auth.py supports this) */
 export function createPipelineStream(complaintId: string): EventSource {
-  return new EventSource(`/api/v1/pipeline/stream/${complaintId}?api_key=${encodeURIComponent(API_KEY)}`)
+  return new EventSource(`${BASE_URL}/api/v1/pipeline/stream/${complaintId}?api_key=${encodeURIComponent(API_KEY)}`)
 }
 
 // ── Typed endpoint helpers ────────────────────────────────────────────────────
