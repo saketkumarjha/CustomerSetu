@@ -711,7 +711,7 @@ async def routing_node(state: PipelineState) -> dict:
     except Exception as e:
         route = "human_review"
         risk_score = 1.0
-        sla_hours = 24
+        sla_hours = 720  # 30 calendar days — align with DEFAULT_TAT when routing errors
         tat_deadline = None
         result = {
             "tier": "human_review",

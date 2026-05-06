@@ -35,12 +35,12 @@ export const SLA_DATA: SlaDataPoint[] = [
   { month: 'Mar', met: 88, breached: 12 },
 ]
 
-export const SENTIMENT_COLORS = ['#C8102E', '#EA580C', '#D97706', '#7C3AED', '#16A34A']
+export const SENTIMENT_COLORS = ['#003087', '#244f9e', '#456fad', '#6b8fbf', '#94adc9']
 
 export const AI_METRICS = [
-  { label: 'Auto-classification accuracy', value: '98.2%', color: '#16A34A' },
-  { label: 'Draft responses generated', value: '95.7%', color: '#003087' },
-  { label: 'Duplicate complaints caught', value: '3 today', color: '#7C3AED' },
-  { label: 'Compliance flags raised', value: '4 active', color: '#C8102E' },
-  { label: 'Avg agent confidence', value: '94.1%', color: '#D97706' },
+  { label: 'Classification accuracy', value: '98.2%', color: '#003087' },
+  { label: 'Draft responses produced', value: '95.7%', color: '#003087' },
+  { label: 'Duplicates detected today', value: '3', color: '#64748B' },
+  { label: 'Compliance reviews open', value: '4', color: '#64748B' },
+  { label: 'Average model confidence', value: '94.1%', color: '#003087' },
 ]

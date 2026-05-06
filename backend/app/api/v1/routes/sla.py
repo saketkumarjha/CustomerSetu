@@ -72,7 +72,7 @@ async def get_sla_at_risk(
 
     predictions = []
     for c in complaints:
-        sla_hours = c.get("sla_hours") or 24
+        sla_hours = c.get("sla_hours") or 720
         prediction = predict_sla_breach(
             complaint_id=c["complaint_id"],
             category=c.get("category", "General Banking"),
@@ -161,7 +161,7 @@ async def predict_single_complaint(complaint_id: str):
         complaint_id=c["complaint_id"],
         category=c.get("category", "General Banking"),
         severity=c.get("severity") or 3,
-        sla_hours=c.get("sla_hours") or 24,
+        sla_hours=c.get("sla_hours") or 720,
         created_at=c.get("created_at", now.isoformat()),
         current_queue_depth=queue_depth,
     )
@@ -236,7 +236,7 @@ async def get_sla_summary():
             complaint_id=c["complaint_id"],
             category=c.get("category", "General Banking"),
             severity=c.get("severity") or 3,
-            sla_hours=c.get("sla_hours") or 24,
+            sla_hours=c.get("sla_hours") or 720,
             created_at=c.get("created_at", now.isoformat()),
             current_queue_depth=queue_depth,
         )

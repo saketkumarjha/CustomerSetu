@@ -185,8 +185,15 @@ def make_routing_decision(
     risk_score = risk_result["risk_score"]
     risk_breakdown = risk_result["breakdown"]
 
-    tat = calculate_tat_deadline(compliance_category if route != "auto_respond" else "NOT_APPLICABLE")
-    tat_deadline = tat["tat_deadline_iso"] if is_rbi_reportable and route != "auto_respond" else None
+    # Regulatory resolution window (RBI TAT) — stored on complaint; separate from tier internal targets
+    tat_category = (
+        compliance_category
+        if (is_rbi_reportable or route == "human_review")
+        else "NOT_APPLICABLE"
+    )
+    tat = calculate_tat_deadline(tat_category)
+    tat_deadline = tat["tat_deadline_iso"] if is_rbi_reportable else None
+    regulatory_sla_hours = tat["sla_hours"]
 
     category_threshold = CATEGORY_CONFIDENCE_THRESHOLDS.get(category, 0.80)
     confidence_passed = confidence_score >= category_threshold
@@ -200,6 +207,8 @@ def make_routing_decision(
         + f"Confidence: {confidence_score:.0%}\n"
         + "\n".join(f"  {i+1}. {step}" for i, step in enumerate(reasoning_steps))
         + f"\nRisk score: {risk_score:.3f}"
+        + f"\nRegulatory SLA: {tat['sla_label']} ({regulatory_sla_hours}h). "
+        f"Tier handling target: {final_sla}h."
     )
 
     return {
@@ -209,7 +218,7 @@ def make_routing_decision(
         "routing_reason": tier_result["reason"],
         "risk_score": risk_score,
         "risk_breakdown": risk_breakdown,
-        "sla_hours": final_sla,
+        "sla_hours": regulatory_sla_hours,
         "rbi_tat_deadline": tat_deadline,
         "penalty_per_day": tat.get("penalty_per_day", 0),
         "override_triggered": False,

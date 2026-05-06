@@ -1,14 +1,29 @@
 import type { Severity } from '../../types'
-import { getSeverityClasses } from '../../utils/styles'
+import { Badge } from './Badge'
+import type { BadgeProps } from './Badge'
 
 interface Props {
   severity: Severity
+  className?: string
 }
 
-export function SeverityBadge({ severity }: Props) {
+function severityVariant(severity: Severity): NonNullable<BadgeProps['variant']> {
+  switch (severity) {
+    case 'Critical':
+      return 'severityCritical'
+    case 'High':
+      return 'severityHigh'
+    case 'Medium':
+      return 'severityMedium'
+    case 'Low':
+      return 'severityLow'
+  }
+}
+
+export function SeverityBadge({ severity, className }: Props) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${getSeverityClasses(severity)}`}>
+    <Badge variant={severityVariant(severity)} className={className}>
       {severity}
-    </span>
+    </Badge>
   )
 }

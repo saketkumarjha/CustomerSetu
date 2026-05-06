@@ -25,7 +25,7 @@ function ChannelIcon({ channel }: { channel: Channel }) {
 
 export function ChannelBar({ stats }: Props) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-full">
+    <div className="glass-panel p-5 h-full">
       <div className="font-semibold text-sm text-ub-blue mb-4">Complaints by Channel</div>
       <div className="space-y-3">
         {stats.map((s) => (
@@ -35,15 +35,15 @@ export function ChannelBar({ stats }: Props) {
             </div>
             <div className="flex-1">
               <div className="flex justify-between text-xs mb-1">
-                <span className="font-medium text-gray-700">{s.channel}</span>
-                <span className="font-bold" style={{ color: s.color }}>
+                <span className="font-medium text-slate-700">{s.channel}</span>
+                <span className="font-semibold tabular-nums text-ub-blue">
                   {s.count}
                 </span>
               </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/60">
                 <div
-                  className="h-1.5 rounded-full transition-all duration-500"
-                  style={{ width: `${(s.count / s.total) * 100}%`, backgroundColor: s.color }}
+                  className="h-1.5 rounded-full bg-ub-blue/85 transition-all duration-500"
+                  style={{ width: `${(s.count / s.total) * 100}%` }}
                 />
               </div>
             </div>

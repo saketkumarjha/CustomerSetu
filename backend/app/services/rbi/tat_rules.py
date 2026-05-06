@@ -7,7 +7,9 @@ Maps each RBI category to:
   - penalty_per_day:       Auto-penalty if TAT breached (Rs/day)
   - penalty_description:   What triggers the penalty
 
-These are based on actual RBI circulars.
+Resolution window is standardized to 30 calendar days (720 hours) for all categories,
+aligned with common RBI complaint-handling / grievance redressal timelines (POC default).
+
 For POC: we assign the TAT deadline at the time of routing.
 For Production: a background job checks approaching breaches and escalates.
 """
@@ -15,83 +17,85 @@ For Production: a background job checks approaching breaches and escalates.
 from datetime import datetime, timedelta, timezone
 from app.services.rbi.categories import RBICategory
 
+# 30 calendar days × 24 hours — uniform resolution SLA (RBI-aligned grievance window)
+RESOLUTION_30_DAYS_HOURS = 720
 
 TAT_RULES = {
     RBICategory.UNAUTHORIZED_TRANSACTION_FRAUD: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 240,      # 10 working days
-        "penalty_per_day": 0,         # liability framework applies instead
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
+        "penalty_per_day": 0,
         "penalty_description": (
-            "RBI Limiting Liability Circular — provisional credit mandatory "
-            "within 10 working days if customer not at fault"
+            "RBI framework — resolution within 30 calendar days; "
+            "limiting-liability / provisional credit rules apply as per circular"
         ),
-        "sla_label": "10 working days (RBI Limiting Liability)",
+        "sla_label": "30 calendar days (RBI complaint resolution)",
     },
     RBICategory.FAILED_TRANSACTION_TAT_BREACH: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 120,      # 5 working days
-        "penalty_per_day": 100,       # Rs 100/day after TAT breach
-        "penalty_description": "RBI TAT Circular — Rs 100/day auto-penalty after 5 working days",
-        "sla_label": "5 working days (₹100/day penalty after breach)",
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
+        "penalty_per_day": 100,
+        "penalty_description": "RBI TAT — ₹100/day auto-penalty after resolution timeline breach",
+        "sla_label": "30 calendar days (₹100/day after breach)",
     },
     RBICategory.UPI_BBPS_SETTLEMENT_ISSUE: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 24,       # T+1 day
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
         "penalty_per_day": 100,
-        "penalty_description": "NPCI guidelines — auto-reversal within T+1 day",
-        "sla_label": "T+1 day",
+        "penalty_description": "NPCI / settlement rules — penalties after resolution timeline breach where applicable",
+        "sla_label": "30 calendar days",
     },
     RBICategory.RECOVERY_AGENT_HARASSMENT: {
-        "acknowledgement_hours": 4,   # immediate
-        "resolution_hours": 24,
+        "acknowledgement_hours": 24,
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
         "penalty_per_day": 0,
-        "penalty_description": "RBI Fair Practices Code — immediate escalation to nodal officer",
-        "sla_label": "24 hours (immediate escalation)",
+        "penalty_description": "RBI Fair Practices Code — escalate per policy within resolution window",
+        "sla_label": "30 calendar days",
     },
     RBICategory.DELAY_IN_PROPERTY_DOC_RELEASE: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 720,      # 30 days
-        "penalty_per_day": 5000,      # Rs 5,000/day after 30 days
-        "penalty_description": "RBI Responsible Lending Conduct 2023 — Rs 5,000/day after 30 days",
-        "sla_label": "30 days (₹5,000/day penalty after breach)",
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
+        "penalty_per_day": 5000,
+        "penalty_description": "RBI Responsible Lending Conduct — ₹5,000/day after resolution timeline breach",
+        "sla_label": "30 calendar days (₹5,000/day penalty after breach)",
     },
     RBICategory.DELAY_IN_CARD_CLOSURE: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 168,      # 7 working days
-        "penalty_per_day": 500,       # Rs 500/day
-        "penalty_description": "RBI Master Direction on Credit Cards — Rs 500/day after 7 working days",
-        "sla_label": "7 working days (₹500/day penalty after breach)",
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
+        "penalty_per_day": 500,
+        "penalty_description": "RBI Master Direction on Credit Cards — ₹500/day after resolution timeline breach",
+        "sla_label": "30 calendar days (₹500/day penalty after breach)",
     },
     RBICategory.UNSOLICITED_CARD_ISSUANCE: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 120,
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
         "penalty_per_day": 0,
-        "penalty_description": "RBI Master Direction — billed amount reversed + 100% penalty",
-        "sla_label": "5 working days",
+        "penalty_description": "RBI Master Direction — resolution within 30 calendar days",
+        "sla_label": "30 calendar days",
     },
     RBICategory.CREDIT_BUREAU_MISREPORTING: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 720,      # 30 days
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
         "penalty_per_day": 0,
-        "penalty_description": "CIC Act — update credit report within 30 days of closure",
-        "sla_label": "30 days",
+        "penalty_description": "CIC Act — update credit report within timeline after closure",
+        "sla_label": "30 calendar days",
     },
     RBICategory.KYC_ACCOUNT_FREEZE_WITHOUT_NOTICE: {
         "acknowledgement_hours": 24,
-        "resolution_hours": 72,
+        "resolution_hours": RESOLUTION_30_DAYS_HOURS,
         "penalty_per_day": 0,
-        "penalty_description": "RBI KYC Master Direction — prior notice mandatory",
-        "sla_label": "72 hours",
+        "penalty_description": "RBI KYC Master Direction — resolve within 30 calendar days",
+        "sla_label": "30 calendar days",
     },
 }
 
-# Default TAT for non-RBI categories
+# Default TAT for non-RBI or unknown categories
 DEFAULT_TAT = {
-    "acknowledgement_hours": 72,  # 3 working days
-    "resolution_hours": 720,      # 30 days
+    "acknowledgement_hours": 24,
+    "resolution_hours": RESOLUTION_30_DAYS_HOURS,
     "penalty_per_day": 0,
-    "penalty_description": "Standard complaint resolution — 30 days",
-    "sla_label": "30 days",
+    "penalty_description": "Standard complaint resolution — 30 calendar days (RBI-aligned)",
+    "sla_label": "30 calendar days",
 }
 
 

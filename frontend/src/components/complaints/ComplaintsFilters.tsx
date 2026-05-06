@@ -15,7 +15,7 @@ const STATUS_OPTIONS: Array<Status | 'all'> = ['all', 'Open', 'In Progress', 'Pe
 const SEVERITY_OPTIONS: Array<Severity | 'all'> = ['all', 'Critical', 'High', 'Medium', 'Low']
 
 const selectCls =
-  'border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-ub-blue text-gray-700 bg-white'
+  'border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:border-ub-blue text-gray-700 bg-white'
 
 export function ComplaintsFilters({
   search,
@@ -27,7 +27,7 @@ export function ComplaintsFilters({
   resultCount,
 }: Props) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-col sm:flex-row flex-wrap gap-2 items-stretch sm:items-center">
+    <div className="glass-panel p-3 flex flex-col sm:flex-row flex-wrap gap-2 items-stretch sm:items-center">
       {/* Search */}
       <div className="relative w-full sm:flex-1" style={{ minWidth: '160px' }}>
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -35,7 +35,7 @@ export function ComplaintsFilters({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search customer, ID or type…"
-          className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-ub-blue"
+          className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-md text-sm focus:outline-none focus:border-ub-blue"
         />
       </div>
 

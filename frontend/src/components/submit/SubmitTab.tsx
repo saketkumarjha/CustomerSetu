@@ -183,7 +183,7 @@ export function SubmitTab({ setActive }: Props) {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-lg font-bold text-red-800 mb-2">Something went wrong</h2>
           <p className="text-sm text-red-600 mb-6">{errorMsg}</p>
-          <button onClick={reset} className="px-6 py-2.5 rounded-lg bg-ub-blue text-white text-sm font-semibold hover:opacity-90">
+          <button onClick={reset} className="px-6 py-2.5 rounded-md bg-ub-blue text-white text-sm font-semibold hover:opacity-90">
             Try Again
           </button>
         </div>
@@ -291,10 +291,10 @@ export function SubmitTab({ setActive }: Props) {
                 </div>
               )}
               {pipelineResult.route && (
-                <div className={`rounded-lg p-3 ${pipelineResult.route === 'auto_respond' ? 'bg-green-50' : 'bg-amber-50'}`}>
-                  <div className="text-xs text-gray-400 mb-0.5">Action</div>
-                  <div className={`font-semibold ${pipelineResult.route === 'auto_respond' ? 'text-green-700' : 'text-amber-700'}`}>
-                    {pipelineResult.route === 'auto_respond' ? '✅ Auto Response Sent' : '👤 Needs Your Review'}
+                  <div className={`rounded-lg p-3 ${pipelineResult.route === 'auto_respond' ? 'bg-slate-50 border border-slate-200' : 'bg-ub-blue-light/50 border border-slate-200'}`}>
+                  <div className="text-xs text-slate-500 mb-0.5">Next step</div>
+                  <div className={`font-semibold ${pipelineResult.route === 'auto_respond' ? 'text-slate-800' : 'text-ub-blue'}`}>
+                  {pipelineResult.route === 'auto_respond' ? 'Automated reply sent' : 'Queued for officer review'}
                   </div>
                 </div>
               )}
@@ -302,13 +302,13 @@ export function SubmitTab({ setActive }: Props) {
             <div className="flex gap-2 mt-4">
               <button
                 onClick={() => { setActive('complaints') }}
-                className="flex-1 py-2.5 rounded-lg bg-ub-blue text-white text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 rounded-md bg-ub-blue text-white text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-1.5"
               >
                 View in Complaints <ChevronRight size={14} />
               </button>
               <button
                 onClick={reset}
-                className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
+                className="px-4 py-2.5 rounded-md border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
               >
                 Submit New
               </button>
@@ -326,7 +326,7 @@ export function SubmitTab({ setActive }: Props) {
   return (
     <div className="max-w-2xl mx-auto space-y-4">
       {/* Page header */}
-      <div className="bg-ub-blue rounded-2xl p-5 text-white">
+      <div className="rounded-2xl p-5 text-white bg-ub-blue border border-white/10 shadow-glass">
         <h1 className="text-lg font-bold mb-1">Register New Complaint</h1>
         <p className="text-blue-200 text-sm">
           Fill in the customer details below. Our AI will automatically analyse and route the complaint.
@@ -334,7 +334,7 @@ export function SubmitTab({ setActive }: Props) {
       </div>
 
       {/* Form */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+      <div className="glass-panel p-5 space-y-4">
         {/* Customer ID */}
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1.5">
@@ -344,7 +344,7 @@ export function SubmitTab({ setActive }: Props) {
             value={customerId}
             onChange={(e) => setCustomerId(e.target.value)}
             placeholder="e.g. CUST-00123 or phone number"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-ub-blue"
+            className="w-full border border-gray-200 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:border-ub-blue"
           />
         </div>
 
@@ -358,7 +358,7 @@ export function SubmitTab({ setActive }: Props) {
               <button
                 key={ch}
                 onClick={() => setChannel(ch)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-all ${
                   channel === ch
                     ? 'bg-ub-blue text-white border-ub-blue'
                     : 'border-gray-200 text-gray-600 hover:border-gray-300'
@@ -380,7 +380,7 @@ export function SubmitTab({ setActive }: Props) {
             onChange={(e) => setComplaintText(e.target.value)}
             placeholder="Type or paste the customer's complaint here. Include account numbers, transaction IDs, dates, and amounts if mentioned."
             rows={6}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-ub-blue resize-none leading-relaxed"
+            className="w-full border border-gray-200 rounded-md px-3 py-2.5 text-sm focus:outline-none focus:border-ub-blue resize-none leading-relaxed"
           />
           <div className="flex justify-between mt-1">
             <span className="text-xs text-gray-400">Minimum 10 characters</span>
@@ -436,7 +436,7 @@ export function SubmitTab({ setActive }: Props) {
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || flowState === 'submitting'}
-          className={`w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+          className={`w-full py-3 rounded-md text-sm font-bold flex items-center justify-center gap-2 transition-all ${
             canSubmit && flowState !== 'submitting'
               ? 'bg-ub-red text-white hover:opacity-90 shadow-sm'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'

@@ -1,14 +1,31 @@
 import type { Status } from '../../types'
-import { getStatusClasses } from '../../utils/styles'
+import { Badge } from './Badge'
+import type { BadgeProps } from './Badge'
 
 interface Props {
   status: Status
+  className?: string
 }
 
-export function StatusBadge({ status }: Props) {
+function statusVariant(status: Status): NonNullable<BadgeProps['variant']> {
+  switch (status) {
+    case 'Open':
+      return 'statusOpen'
+    case 'In Progress':
+      return 'statusInProgress'
+    case 'Pending':
+      return 'statusPending'
+    case 'Resolved':
+      return 'statusResolved'
+    case 'Escalated':
+      return 'statusEscalated'
+  }
+}
+
+export function StatusBadge({ status, className }: Props) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusClasses(status)}`}>
+    <Badge variant={statusVariant(status)} className={className}>
       {status}
-    </span>
+    </Badge>
   )
 }

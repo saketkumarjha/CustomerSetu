@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import type { Complaint, Status, Severity } from '../../types'
+import type { Complaint, Status, Severity, TabId } from '../../types'
 import { COMPLAINTS } from '../../data/complaints'
 import { ComplaintsFilters } from './ComplaintsFilters'
 import { ComplaintsTable } from './ComplaintsTable'
@@ -68,7 +68,7 @@ function apiToFrontend(c: ApiComplaint): Complaint {
   }
 }
 
-export function ComplaintsTab() {
+export function ComplaintsTab({ setActive }: { setActive?: (id: TabId) => void }) {
   const [selected, setSelected] = useState<Complaint | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
@@ -149,13 +149,13 @@ export function ComplaintsTab() {
       <div className="flex items-center gap-3 flex-wrap">
         {listLoading && <span className="text-xs text-gray-400">Loading complaints…</span>}
         {usingApi && !listLoading && (
-          <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-0.5 rounded-full">
-            ● Live data · {apiData.total} total
+          <span className="text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+            Live · {apiData.total} total
           </span>
         )}
         {listError && (
-          <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-            Demo mode — showing sample data
+          <span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
+            Sample data (offline)
           </span>
         )}
         {usingApi && (
@@ -186,6 +186,8 @@ export function ComplaintsTab() {
             onClose={handleClose}
             loadingDetail={loadingDetail}
             apiDetail={apiComplaintDetail}
+            pipelineAvailable={usingApi}
+            onAfterRunPipeline={() => setActive?.('pipeline')}
           />
         )}
       </div>
@@ -205,6 +207,8 @@ export function ComplaintsTab() {
               onClose={handleClose}
               loadingDetail={loadingDetail}
               apiDetail={apiComplaintDetail}
+              pipelineAvailable={usingApi}
+              onAfterRunPipeline={() => setActive?.('pipeline')}
             />
           </div>
         </div>

@@ -18,10 +18,10 @@ interface Props {
 
 const CHANNEL_COLORS: Record<string, string> = {
   Email: '#003087',
-  Phone: '#C8102E',
-  'Web Form': '#0052CC',
-  'Mobile App': '#7C3AED',
-  'Social Media': '#EA580C',
+  Phone: '#003087',
+  'Web Form': '#003087',
+  'Mobile App': '#003087',
+  'Social Media': '#003087',
 }
 
 // Mock channel data from static COMPLAINTS as fallback
@@ -66,7 +66,7 @@ export function OverviewTab({ setActive }: Props) {
     <div className="space-y-4 md:space-y-5">
       {/* API status banner */}
       {error && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-amber-700">
+        <div className="glass-panel border-amber-200/80 px-4 py-2.5 flex items-center justify-between text-xs text-amber-900">
           <span>Showing demo data — could not connect to backend</span>
           <button onClick={refetch} className="flex items-center gap-1 font-medium hover:underline">
             <RefreshCw size={11} /> Retry
@@ -82,41 +82,37 @@ export function OverviewTab({ setActive }: Props) {
           value={loading ? '…' : totalComplaints}
           sub="Last 30 days"
           valueColor="#003087"
-          trend={stats ? `${stats.overview.auto_respond_rate_percent}% auto-resolved` : '-8%'}
-          trendUp={false}
+          trend={stats ? `${stats.overview.auto_respond_rate_percent}% auto-resolved` : '—'}
         />
         <KpiCard
           icon={<AlertCircle size={18} />}
           label="Open / Active"
           value={loading ? '…' : openCount}
           sub="Needs attention"
-          valueColor="#C8102E"
-          trend={stats ? `${stats.overview.human_review} pending review` : '+12%'}
-          trendUp={true}
+          valueColor="#003087"
+          trend={stats ? `${stats.overview.human_review} in review` : '—'}
         />
         <KpiCard
           icon={<AlertTriangle size={18} />}
           label={stats ? 'Awaiting Review' : 'SLA Breached'}
           value={loading ? '…' : breachedCount}
           sub={stats ? 'Human review queue' : 'Escalation required'}
-          valueColor="#D97706"
-          trend={stats ? `${stats.overview.rbi_reportable} RBI flagged` : '+5%'}
-          trendUp={true}
+          valueColor="#003087"
+          trend={stats ? `${stats.overview.rbi_reportable} RBI flagged` : '—'}
         />
         <KpiCard
           icon={<CheckCircle2 size={18} />}
           label="Resolved"
           value={loading ? '…' : resolvedCount}
           sub={stats ? 'Closed & resolved' : 'Avg 4.2h resolution'}
-          valueColor="#16A34A"
+          valueColor="#003087"
           trend={`${autoRate}% auto-resolved`}
-          trendUp={false}
         />
       </div>
 
       {/* Daily volume chart (API only) */}
       {dailyVolume.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+        <div className="glass-panel p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="font-semibold text-sm text-ub-blue flex items-center gap-2">
               <TrendingUp size={14} />
@@ -160,18 +156,15 @@ export function OverviewTab({ setActive }: Props) {
       {/* Category distribution (API only) */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {stats.distributions.by_category.slice(0, 6).map((cat, i) => {
-            const colors = ['#003087', '#C8102E', '#0052CC', '#D97706', '#7C3AED', '#16A34A']
-            return (
-              <div key={cat.category} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 text-center">
-                <div className="text-xl font-bold mb-0.5" style={{ color: colors[i % colors.length] }}>
-                  {cat.count}
-                </div>
-                <div className="text-xs text-gray-500 leading-tight">{cat.category}</div>
-                <div className="text-xs text-gray-400 mt-0.5">{cat.percent}%</div>
+          {stats.distributions.by_category.slice(0, 6).map((cat) => (
+            <div key={cat.category} className="glass-panel p-3 text-center">
+              <div className="text-xl font-bold mb-0.5 tabular-nums text-ub-blue">
+                {cat.count}
               </div>
-            )
-          })}
+              <div className="text-xs text-gray-500 leading-tight">{cat.category}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{cat.percent}%</div>
+            </div>
+          ))}
         </div>
       )}
 

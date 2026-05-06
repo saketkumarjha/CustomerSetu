@@ -13,8 +13,11 @@ export default {
         },
       },
       fontFamily: {
-        sans: ['"IBM Plex Sans"', 'ui-sans-serif', 'system-ui'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui'],
         mono: ['"IBM Plex Mono"', 'ui-monospace'],
+      },
+      boxShadow: {
+        glass: '0 1px 2px rgba(0, 48, 135, 0.04), 0 8px 24px rgba(0, 26, 77, 0.06)',
       },
     },
   },

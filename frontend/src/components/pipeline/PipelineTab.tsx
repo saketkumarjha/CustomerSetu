@@ -54,15 +54,22 @@ export function PipelineTab() {
   const runningRef = useRef(false)
 
   const { data: complaintsData, loading: listLoading } = useApiData(
-    () => api.complaints.list({ limit: 30 }),
+    () => api.complaints.list({ limit: 100 }),
     [],
   )
 
-  const complaints: ComplaintOption[] = complaintsData?.complaints ?? []
+  const allComplaints: ComplaintOption[] = complaintsData?.complaints ?? []
+  /** Pipeline tab: only complaints not yet fully analysed */
+  const complaints = allComplaints.filter((c) => c.pipeline_status !== 'complete')
 
-  // Select first complaint automatically
+  // Keep selection in sync: only pending / non-complete complaints appear
   useEffect(() => {
-    if (!selectedId && complaints.length > 0) {
+    if (complaints.length === 0) {
+      setSelectedId('')
+      return
+    }
+    const stillValid = complaints.some((c) => c.complaint_id === selectedId)
+    if (!selectedId || !stillValid) {
       setSelectedId(complaints[0].complaint_id)
     }
   }, [complaints, selectedId])
@@ -401,12 +408,14 @@ export function PipelineTab() {
         {/* Complaint selector */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
-            Select Complaint
+            Pending analysis ({complaints.length})
           </div>
           {listLoading ? (
             <p className="text-xs text-gray-400 py-3 text-center">Loading complaints…</p>
           ) : complaints.length === 0 ? (
-            <p className="text-xs text-gray-400 py-3 text-center">No complaints found. Submit one first.</p>
+            <p className="text-xs text-gray-500 py-3 text-center leading-relaxed">
+              Nothing waiting for analysis. Complaints that are already analysed are not listed here—submit a new one or re-open a case from the database if you need to re-run.
+            </p>
           ) : (
             <div className="space-y-1.5 max-h-72 overflow-y-auto">
               {complaints.map((c) => (
@@ -423,13 +432,13 @@ export function PipelineTab() {
                   <div className="text-gray-400 mt-0.5 truncate">
                     {c.customer_id} · {c.channel ?? 'Unknown channel'}
                   </div>
-                  {c.pipeline_status && (
-                    <div className={`mt-1 text-xs font-medium ${
-                      c.pipeline_status === 'complete' ? 'text-green-600'
-                      : c.pipeline_status === 'pending' ? 'text-gray-400'
-                      : 'text-blue-600'
-                    }`}>
-                      {c.pipeline_status === 'complete' ? '✓ Analysed' : c.pipeline_status === 'pending' ? '◦ Not analysed' : '⟳ Processing'}
+                  {c.pipeline_status && c.pipeline_status !== 'complete' && (
+                    <div className="mt-1 text-xs font-medium text-slate-500">
+                      {c.pipeline_status === 'pending'
+                        ? 'Not analysed'
+                        : c.pipeline_status === 'processing'
+                        ? 'In progress'
+                        : 'Stopped / retry'}
                     </div>
                   )}
                 </button>

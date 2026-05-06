@@ -25,42 +25,43 @@ export function Sidebar({ active, setActive, isOpen, onClose }: Props) {
   }
 
   const sidebarContent = (
-    <aside className="flex flex-col h-full py-4 bg-slate-50 border-r border-gray-200 w-56 lg:w-48">
+    <aside className="flex flex-col h-full py-4 bg-white/75 backdrop-blur-md border-r border-slate-200/90 w-56 lg:w-48">
       {/* Mobile close */}
       <div className="flex items-center justify-between px-4 mb-2 lg:hidden">
-        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Navigation</span>
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Navigation</span>
         <button
+          type="button"
           onClick={onClose}
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors"
+          className="w-8 h-8 rounded-md flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"
         >
           <X size={16} />
         </button>
       </div>
 
-      {/* Menu section label */}
       <div className="px-4 pb-1">
-        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide hidden lg:block">Menu</span>
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide hidden lg:block">Menu</span>
       </div>
 
-      <nav className="flex flex-col gap-0.5 flex-1">
+      <nav className="flex flex-col gap-0.5 flex-1 px-1">
         {TABS.map((tab) => {
           const isActive = active === tab.id
           return (
             <button
+              type="button"
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
-              className={`flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-left transition-all border-r-2 group ${
+              className={`flex items-center gap-3 mx-1 px-3 py-2 rounded-md text-sm font-medium text-left transition-colors border ${
                 isActive
-                  ? 'bg-blue-50 text-ub-blue border-ub-blue'
-                  : 'text-gray-500 border-transparent hover:bg-gray-100 hover:text-gray-700'
+                  ? 'bg-ub-blue-light/90 text-ub-blue border-slate-200/80 shadow-sm'
+                  : 'text-slate-600 border-transparent hover:bg-slate-100/80 hover:text-slate-800'
               }`}
             >
-              <span className={`flex-shrink-0 ${isActive ? 'text-ub-blue' : 'text-gray-400 group-hover:text-gray-600'}`}>
+              <span className={`flex-shrink-0 ${isActive ? 'text-ub-blue' : 'text-slate-400'}`}>
                 {tab.icon}
               </span>
               <span className="flex-1 truncate">{tab.label}</span>
               {tab.badge && (
-                <span className="text-xs bg-ub-red text-white px-1.5 py-0.5 rounded-full font-bold flex-shrink-0">
+                <span className="text-[10px] bg-ub-red text-white px-1.5 py-0.5 rounded-md font-semibold flex-shrink-0">
                   {tab.badge}
                 </span>
               )}
@@ -69,22 +70,21 @@ export function Sidebar({ active, setActive, isOpen, onClose }: Props) {
         })}
       </nav>
 
-      {/* Bottom system info */}
-      <div className="px-4 py-4 border-t border-gray-200 space-y-1.5">
-        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">System Status</div>
+      <div className="px-4 py-4 border-t border-slate-200/80 space-y-1.5 mt-auto">
+        <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">System</div>
         {[
-          { label: 'AI Agents', value: '10', color: 'text-green-600' },
-          { label: 'Avg pipeline', value: '~5 sec', color: 'text-ub-blue' },
-          { label: 'Uptime', value: '99.98%', color: 'text-green-600' },
+          { label: 'AI agents', value: '10' },
+          { label: 'Avg. pipeline', value: '~5s' },
+          { label: 'Uptime', value: '99.98%' },
         ].map((s) => (
           <div key={s.label} className="flex justify-between text-xs">
-            <span className="text-gray-400">{s.label}</span>
-            <span className={`font-semibold ${s.color}`}>{s.value}</span>
+            <span className="text-slate-400">{s.label}</span>
+            <span className="font-semibold text-slate-700">{s.value}</span>
           </div>
         ))}
         <div className="flex items-center gap-1.5 mt-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs text-green-600 font-medium">Backend connected</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/90" />
+          <span className="text-xs text-slate-600 font-medium">Connected</span>
         </div>
       </div>
     </aside>
@@ -92,13 +92,11 @@ export function Sidebar({ active, setActive, isOpen, onClose }: Props) {
 
   return (
     <>
-      {/* Desktop — always visible */}
       <div className="hidden lg:flex flex-shrink-0">{sidebarContent}</div>
 
-      {/* Mobile — overlay drawer */}
       {isOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex">
-          <div className="absolute inset-0 bg-black bg-opacity-40" onClick={onClose} />
+          <div className="absolute inset-0 bg-slate-900/30 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
           <div className="relative z-50 flex-shrink-0 shadow-xl animate-slide-in-left">
             {sidebarContent}
           </div>

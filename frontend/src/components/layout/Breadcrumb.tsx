@@ -6,13 +6,13 @@ interface Props {
 }
 
 const LABELS: Record<TabId, { label: string; desc: string }> = {
-  overview: { label: 'Overview', desc: 'Dashboard summary and recent activity' },
-  complaints: { label: 'All Complaints', desc: 'View, search and manage all complaints' },
-  submit: { label: 'Register Complaint', desc: 'Submit a new customer complaint for AI analysis' },
-  pipeline: { label: 'AI Pipeline', desc: 'Live AI analysis with 10 specialised agents' },
-  analytics: { label: 'Analytics', desc: 'Performance metrics and trend reports' },
-  rbi: { label: 'RBI Compliance', desc: 'Regulatory compliance tracking and TAT monitoring' },
-  sla: { label: 'SLA Tracker', desc: 'Service level agreement monitoring and breach prediction' },
+  overview: { label: 'Overview', desc: 'Summary and recent complaints' },
+  complaints: { label: 'All Complaints', desc: 'Search and review complaints' },
+  submit: { label: 'Register Complaint', desc: 'Enter a complaint for analysis' },
+  pipeline: { label: 'AI Pipeline', desc: 'Step-by-step analysis view' },
+  analytics: { label: 'Analytics', desc: 'Volumes, satisfaction, and trends' },
+  rbi: { label: 'RBI Compliance', desc: 'Regulatory reporting and deadlines' },
+  sla: { label: 'SLA Tracker', desc: 'Targets and overdue cases' },
 }
 
 export function Breadcrumb({ active }: Props) {

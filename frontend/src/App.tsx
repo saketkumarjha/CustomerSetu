@@ -16,7 +16,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100 font-sans">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-100 via-slate-50 to-ub-blue-light/50 font-sans">
       <Header
         sidebarOpen={sidebarOpen}
         onMenuToggle={() => setSidebarOpen((o) => !o)}
@@ -34,7 +34,7 @@ export default function App() {
           <Breadcrumb active={active} />
 
           {active === 'overview' && <OverviewTab setActive={setActive} />}
-          {active === 'complaints' && <ComplaintsTab />}
+          {active === 'complaints' && <ComplaintsTab setActive={setActive} />}
           {active === 'submit' && <SubmitTab setActive={setActive} />}
           {active === 'pipeline' && <PipelineTab />}
           {active === 'analytics' && <AnalyticsTab />}
