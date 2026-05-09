@@ -350,52 +350,92 @@ async def get_escalation_status(complaint_id: str):
       - escalation_loop_detected : bool
       - escalation_history   : list — full audit trail from complaint_escalation_history
     """
+    import logging
+
     from app.db.supabase_client import get_supabase
+
+    logger = logging.getLogger(__name__)
     supabase = get_supabase()
 
-    # Complaint record
-    c_result = (
-        supabase.table("complaints")
-        .select(
-            "complaint_id, current_tier, escalation_count, escalation_path, "
-            "max_tier_reached, is_escalating, escalation_loop_detected, last_escalation_at"
+    def _project_history_row(h: dict) -> dict:
+        return {
+            "from_tier": h.get("from_tier"),
+            "to_tier": h.get("to_tier"),
+            "escalation_reason": h.get("escalation_reason"),
+            "confidence_before": h.get("confidence_before"),
+            "escalation_decision_reasoning": h.get("escalation_decision_reasoning"),
+            "signals_detected": h.get("signals_detected"),
+            "escalated_at": h.get("escalated_at"),
+            "status": h.get("status"),
+        }
+
+    # Use select("*") so partial migrations (missing one column) don't break PostgREST.
+    try:
+        c_result = (
+            supabase.table("complaints")
+            .select("*")
+            .eq("complaint_id", complaint_id)
+            .execute()
         )
-        .eq("complaint_id", complaint_id)
-        .execute()
-    )
+    except Exception as exc:
+        logger.exception("escalation-status: complaints query failed for %s", complaint_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not load complaint: {exc!s}",
+        ) from exc
+
     if not c_result.data:
         raise HTTPException(status_code=404, detail=f"Complaint {complaint_id} not found.")
 
     row = c_result.data[0]
+    row.pop("original_text", None)
 
-    # Escalation history audit trail
-    h_result = (
-        supabase.table("complaint_escalation_history")
-        .select(
-            "from_tier, to_tier, escalation_reason, confidence_before, "
-            "escalation_decision_reasoning, signals_detected, escalated_at, status"
+    escalation_history: list = []
+    try:
+        h_result = (
+            supabase.table("complaint_escalation_history")
+            .select("*")
+            .eq("complaint_id", complaint_id)
+            .order("escalated_at", desc=False)
+            .execute()
         )
-        .eq("complaint_id", complaint_id)
-        .order("escalated_at", desc=False)
-        .execute()
-    )
+        for h in h_result.data or []:
+            escalation_history.append(_project_history_row(h))
+    except Exception as exc:
+        # Table missing, RLS, or schema drift — still return complaint tier snapshot
+        logger.warning(
+            "escalation-status: complaint_escalation_history unavailable for %s: %s",
+            complaint_id,
+            exc,
+        )
 
-    escalation_path = row.get("escalation_path") or []
+    esc_path = row.get("escalation_path")
+    if esc_path is None:
+        escalation_path: list = []
+    elif isinstance(esc_path, list):
+        escalation_path = esc_path
+    else:
+        escalation_path = list(esc_path) if esc_path else []
+
+    current_tier = row.get("current_tier")
+    if current_tier is None:
+        current_tier = row.get("initial_tier")
+
     next_action = "idle"
     if row.get("is_escalating"):
-        next_action = f"attempting_resolution_at_tier_{row.get('current_tier')}"
+        next_action = f"attempting_resolution_at_tier_{current_tier}"
     elif row.get("escalation_count", 0) > 0:
         next_action = "escalation_complete"
 
     return {
         "complaint_id": complaint_id,
-        "is_escalating": row.get("is_escalating", False),
-        "current_tier": row.get("current_tier"),
-        "escalation_count": row.get("escalation_count", 0),
+        "is_escalating": bool(row.get("is_escalating", False)),
+        "current_tier": current_tier,
+        "escalation_count": int(row.get("escalation_count") or 0),
         "escalation_path": escalation_path,
-        "max_tier_reached": row.get("max_tier_reached", 0),
+        "max_tier_reached": int(row.get("max_tier_reached") or 0),
         "last_escalation_at": row.get("last_escalation_at"),
-        "escalation_loop_detected": row.get("escalation_loop_detected", False),
+        "escalation_loop_detected": bool(row.get("escalation_loop_detected", False)),
         "next_action": next_action,
-        "escalation_history": h_result.data or [],
+        "escalation_history": escalation_history,
     }

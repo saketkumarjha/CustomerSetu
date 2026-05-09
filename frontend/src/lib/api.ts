@@ -57,6 +57,145 @@ export function createPipelineStream(complaintId: string): EventSource {
   return new EventSource(`${BASE_URL}/api/v1/pipeline/stream/${complaintId}?api_key=${encodeURIComponent(API_KEY)}`)
 }
 
+export interface ExportDatasetQuery {
+  minCombinedScore?: number
+  category?: string
+  onlyAgentAccepted?: boolean
+  preview?: boolean
+}
+
+function buildExportDatasetSearchParams(params?: ExportDatasetQuery): string {
+  const qs = new URLSearchParams()
+  if (params?.minCombinedScore != null && params.minCombinedScore > 0) {
+    qs.set('min_combined_score', String(params.minCombinedScore))
+  }
+  if (params?.category?.trim()) qs.set('category', params.category.trim())
+  if (params?.onlyAgentAccepted) qs.set('only_agent_accepted', 'true')
+  if (params?.preview) qs.set('preview', 'true')
+  return qs.toString()
+}
+
+export type DatasetExportDownloadResult =
+  | { message: string; total_records?: number; hint?: string }
+  | { downloaded: true; filename: string; recordCount?: number }
+
+async function downloadFineTuneDatasetFile(
+  params?: Omit<ExportDatasetQuery, 'preview'>,
+): Promise<DatasetExportDownloadResult> {
+  const qs = buildExportDatasetSearchParams({ ...params, preview: false })
+  const path = `/api/v1/feedback/export-dataset${qs ? `?${qs}` : ''}`
+  const res = await fetch(`${BASE_URL}${path}`, { headers: authHeaders() })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try {
+      const j = (await res.json()) as { detail?: string; message?: string }
+      detail = j.detail ?? j.message ?? detail
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail)
+  }
+  const ct = res.headers.get('content-type') || ''
+  if (ct.includes('application/json')) {
+    return (await res.json()) as DatasetExportDownloadResult
+  }
+  const blob = await res.blob()
+  let filename = 'fine_tune_dataset.jsonl'
+  const cd = res.headers.get('Content-Disposition')
+  const m = cd?.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)/i)
+  if (m) filename = decodeURIComponent(m[1].trim())
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+  const totalHeader = res.headers.get('X-Total-Records')
+  return {
+    downloaded: true as const,
+    filename,
+    recordCount: totalHeader ? parseInt(totalHeader, 10) : undefined,
+  }
+}
+
+// ── Agent desk (staff queue & metrics) types ──────────────────────────────────
+
+export interface AgentQueueItem {
+  id: string
+  queue_status?: string
+  assigned_to?: string | null
+  priority?: string
+  priority_score?: number
+  queue_position?: number | null
+  sla_remaining_hours?: number | null
+  sla_deadline?: string | null
+  category?: string | null
+  severity?: number | null
+  tier?: number
+  estimated_review_time?: string
+}
+
+export interface AgentQueueResponse {
+  total_queue_size: number
+  my_assigned: number
+  my_in_review: number
+  complaints: AgentQueueItem[]
+}
+
+export interface AgentWorkspaceActionBody {
+  agent_id: string
+  action: 'ACCEPT' | 'EDIT' | 'REJECT' | 'MANUAL_ESCALATE'
+  edited_response?: string | null
+  rejection_reason?: string | null
+  escalation_target_tier?: number | null
+  notes?: string
+}
+
+export interface AgentMetricsResponse {
+  agent_id: string
+  total_reviewed: number
+  avg_review_time: string
+  acceptance_rate?: number | null
+  edit_rate?: number | null
+  rejection_rate?: number | null
+  escalation_rate?: number | null
+  current_workload: number
+  categories_handled?: Record<string, number>
+}
+
+export interface TeamMetricsResponse {
+  tier_level: number
+  agent_count: number
+  total_reviewed: number
+  queue_size: number
+  agents: AgentMetricsResponse[]
+}
+
+/** Full review package from GET .../complaint/{id}/context */
+export interface AgentComplaintContext {
+  complaint_id?: string
+  complaint_summary?: {
+    masked_text?: string
+    channel?: string
+    customer_id?: string
+    submitted_at?: string
+    current_tier?: number
+    status?: string
+  }
+  draft_response?: {
+    text?: string | null
+    confidence?: number
+  }
+  suggested_actions?: string[]
+  note?: string
+}
+
+export interface NextComplaintResponse {
+  message: string
+  complaint: AgentComplaintContext | null
+  queue_info?: Record<string, unknown>
+}
+
 // ── Typed endpoint helpers ────────────────────────────────────────────────────
 
 export const api = {
@@ -76,7 +215,9 @@ export const api = {
     get: (id: string) => apiGet<ApiComplaint>(`/api/v1/complaints/${id}`),
     explanation: (id: string) => apiGet<ExplanationResponse>(`/api/v1/complaints/${id}/explanation`),
     shadowOverride: (id: string, body: { agent_id: string; corrected_response: string; override_reason: string }) =>
-      apiPost(`/api/v1/complaints/${id}/shadow-override`, body),
+      apiPost<ShadowOverrideResponse>(`/api/v1/complaints/${id}/shadow-override`, body),
+    escalationStatus: (id: string) =>
+      apiGet<EscalationStatusResponse>(`/api/v1/complaints/${id}/escalation-status`),
   },
   pipeline: {
     run: (complaintId: string) =>
@@ -87,9 +228,57 @@ export const api = {
     csatTrends: (days = 30) => apiGet<CSATTrends>(`/api/v1/dashboard/csat-trends?days=${days}`),
     pipelineHealth: (days = 7) => apiGet<PipelineHealth>(`/api/v1/dashboard/pipeline-health?days=${days}`),
   },
+  agent: {
+    queue: (p: { agentId: string; tierLevel: number; statusFilter?: string }) => {
+      const qs = new URLSearchParams()
+      qs.set('agent_id', p.agentId)
+      qs.set('tier_level', String(p.tierLevel))
+      if (p.statusFilter) qs.set('status_filter', p.statusFilter)
+      return apiGet<AgentQueueResponse>(`/api/v1/agent/queue?${qs}`)
+    },
+    complaintContext: (complaintId: string, agentId: string) =>
+      apiGet<AgentComplaintContext>(
+        `/api/v1/agent/complaint/${encodeURIComponent(complaintId)}/context?agent_id=${encodeURIComponent(agentId)}`,
+      ),
+    submitAction: (complaintId: string, body: AgentWorkspaceActionBody) =>
+      apiPost(`/api/v1/agent/complaint/${encodeURIComponent(complaintId)}/action`, body),
+    nextComplaint: (body: { agent_id: string; tier_level: number }) =>
+      apiPost<NextComplaintResponse>('/api/v1/agent/next-complaint', body),
+    metrics: (agentId: string, dateFrom?: string, dateTo?: string) => {
+      const qs = new URLSearchParams()
+      if (dateFrom) qs.set('date_from', dateFrom)
+      if (dateTo) qs.set('date_to', dateTo)
+      const s = qs.toString()
+      return apiGet<AgentMetricsResponse>(
+        `/api/v1/agent/metrics/${encodeURIComponent(agentId)}${s ? `?${s}` : ''}`,
+      )
+    },
+    teamMetrics: (tierLevel: number, dateFrom?: string, dateTo?: string) => {
+      const qs = new URLSearchParams()
+      if (dateFrom) qs.set('date_from', dateFrom)
+      if (dateTo) qs.set('date_to', dateTo)
+      const s = qs.toString()
+      return apiGet<TeamMetricsResponse>(
+        `/api/v1/agent/team-metrics/${tierLevel}${s ? `?${s}` : ''}`,
+      )
+    },
+  },
   feedback: {
     submitAgent: (body: AgentFeedbackBody) => apiPost('/api/v1/feedback/agent', body),
-    datasetStats: () => apiGet<DatasetStats>('/api/v1/feedback/dataset-stats'),
+    datasetStats: () => apiGet<DatasetStatsResponse>('/api/v1/feedback/dataset-stats'),
+    datasetRecords: (limit = 50) =>
+      apiGet<DatasetRecordsResponse>(`/api/v1/feedback/dataset-records?limit=${limit}`),
+    triggerSurvey: (complaintId: string) =>
+      apiPost<TriggerSurveyResponse>(`/api/v1/feedback/trigger-survey/${complaintId}`),
+    submitCustomer: (body: CustomerFeedbackBody) =>
+      apiPost<CustomerFeedbackResponse>('/api/v1/feedback/customer', body),
+    exportDatasetPreview: (params?: ExportDatasetQuery) =>
+      apiGet<DatasetExportPreviewResponse>(
+        `/api/v1/feedback/export-dataset?${buildExportDatasetSearchParams({ ...params, preview: true })}`,
+      ),
+    /** Opens browser download for JSONL, or resolves to JSON if API returns no rows / empty export */
+    exportDatasetDownload: (params?: Omit<ExportDatasetQuery, 'preview'>) =>
+      downloadFineTuneDatasetFile(params),
   },
   rbi: {
     report: () => apiGet<RBIReport>('/api/v1/rbi/report'),
@@ -129,6 +318,14 @@ export interface PipelineRunResponse {
   route?: string
 }
 
+/** Single grounding warning from LLM judge (see grounding_agent.py) */
+export interface GroundingWarningItem {
+  type?: string
+  claim?: string
+  issue?: string
+  suggestion?: string
+}
+
 export interface ApiComplaint {
   complaint_id: string
   customer_id: string
@@ -152,13 +349,21 @@ export interface ApiComplaint {
   action_steps?: string[]
   confidence_score?: number
   grounding_score?: number
-  grounding_warnings?: string[]
+  /** From Grounding agent: structured objects; legacy may be plain strings */
+  grounding_warnings?: (string | GroundingWarningItem)[]
   route?: string
   risk_score?: number
   sla_hours?: number
   rbi_tat_deadline?: string
   pipeline_status?: string
   status?: string
+  /** Shadow auto-send: replacement deadline for human correction */
+  shadow_override_deadline?: string | null
+  shadow_overridden?: boolean
+  auto_sent_at?: string | null
+  assigned_tier?: number | null
+  response_tier?: string | null
+  current_tier?: number | null
   image_url?: string
   extraction_method?: string
   is_duplicate?: boolean
@@ -195,6 +400,38 @@ export interface ExplanationResponse {
   severity?: number
   total_agents: number
   explanation_trace: AgentDecision[]
+}
+
+/** GET .../escalation-status — read-only snapshot of tier routing & audit trail */
+export interface EscalationStatusResponse {
+  complaint_id: string
+  is_escalating: boolean
+  current_tier: number | null
+  escalation_count: number
+  escalation_path: number[]
+  max_tier_reached: number
+  last_escalation_at: string | null
+  escalation_loop_detected: boolean
+  next_action: string
+  escalation_history: Array<{
+    from_tier?: number | null
+    to_tier?: number | null
+    escalation_reason?: string | null
+    confidence_before?: number | null
+    escalation_decision_reasoning?: string | null
+    signals_detected?: unknown
+    escalated_at?: string | null
+    status?: string | null
+  }>
+}
+
+export interface ShadowOverrideResponse {
+  complaint_id: string
+  override_applied: boolean
+  corrected_response_sent: boolean
+  agent_id: string
+  override_reason: string
+  message: string
 }
 
 export interface DashboardStats {
@@ -257,10 +494,84 @@ export interface AgentFeedbackBody {
   rejection_reason?: string
 }
 
-export interface DatasetStats {
+export interface DatasetStatsResponse {
   total_records: number
+  message?: string
+  unexported_records?: number
+  exported_records?: number
+  quality_breakdown?: {
+    'accepted_agent_1.0': number
+    'edited_agent_0.5': number
+    'rejected_agent_0.0': number
+  }
+  avg_combined_score?: number
   by_category?: Record<string, number>
-  fine_tuning_readiness?: { current: number; recommended_minimum: number; percentage: number; status: string }
+  fine_tuning_readiness?: {
+    current: number
+    recommended_minimum: number
+    percentage: number
+    status: string
+  }
+  next_steps?: string
+}
+
+/** @deprecated alias — use DatasetStatsResponse */
+export type DatasetStats = DatasetStatsResponse
+
+export interface TriggerSurveyResponse {
+  complaint_id: string
+  survey_triggered: boolean
+  status_updated_to?: string
+  message: string
+  survey_fields?: Record<string, string>
+}
+
+export interface CustomerFeedbackBody {
+  complaint_id: string
+  customer_id: string
+  rating: number
+  issue_tags?: string[]
+  feedback_text?: string
+}
+
+export interface CustomerFeedbackResponse {
+  status: string
+  message: string
+  rating?: number
+  combined_rl_score?: number
+  kb_promoted?: boolean
+  calibration_triggered?: boolean
+}
+
+export interface DatasetExportPreviewResponse {
+  preview_mode?: boolean
+  total_records_to_export?: number
+  avg_combined_score?: number
+  by_category?: Record<string, number>
+  by_agent_rating?: Record<string, number>
+  fine_tuning_readiness?: string
+  hint?: string
+  message?: string
+  total_records?: number
+}
+
+export interface DatasetRecordsResponse {
+  limit: number
+  count: number
+  records: DatasetRecordRow[]
+  source_note: string
+}
+
+export interface DatasetRecordRow {
+  id: number | string
+  complaint_id: string
+  category?: string | null
+  agent_rating?: number | null
+  customer_rating?: number | null
+  combined_score?: number | null
+  exported?: boolean | null
+  created_at?: string | null
+  complaint_preview: string
 }
 
 export interface RBIReport {

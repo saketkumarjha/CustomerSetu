@@ -1,4 +1,15 @@
-import { BarChart2, ClipboardList, Cpu, TrendingUp, X, PlusCircle, Shield, Clock } from 'lucide-react'
+import {
+  BarChart2,
+  ClipboardList,
+  Cpu,
+  TrendingUp,
+  X,
+  PlusCircle,
+  Shield,
+  Clock,
+  MessageSquareHeart,
+  UserCircle2,
+} from 'lucide-react'
 import type { TabId } from '../../types'
 
 interface Props {
@@ -11,9 +22,11 @@ interface Props {
 const TABS: { id: TabId; icon: React.ReactNode; label: string; badge?: string }[] = [
   { id: 'overview', icon: <BarChart2 size={16} />, label: 'Overview' },
   { id: 'complaints', icon: <ClipboardList size={16} />, label: 'All Complaints' },
+  { id: 'agentDesk', icon: <UserCircle2 size={16} />, label: 'Agent desk' },
   { id: 'submit', icon: <PlusCircle size={16} />, label: 'New Complaint', badge: 'NEW' },
   { id: 'pipeline', icon: <Cpu size={16} />, label: 'AI Pipeline' },
   { id: 'analytics', icon: <TrendingUp size={16} />, label: 'Analytics' },
+  { id: 'feedback', icon: <MessageSquareHeart size={16} />, label: 'Feedback' },
   { id: 'rbi', icon: <Shield size={16} />, label: 'RBI Compliance' },
   { id: 'sla', icon: <Clock size={16} />, label: 'SLA Tracker' },
 ]

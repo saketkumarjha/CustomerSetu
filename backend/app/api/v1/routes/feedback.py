@@ -371,6 +371,65 @@ async def get_dataset_stats():
             else f"Need {500 - len(records)} more feedback records"
         ),
     }
+
+
+@router.get(
+    "/dataset-records",
+    summary="List accumulated fine_tune_dataset rows",
+)
+async def list_dataset_records(
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    Rows are created when agents submit feedback on an AI draft (complaint detail panel)
+    or other flows that call `_accumulate_fine_tune_record`. Used by the Feedback UI table.
+    """
+    supabase = get_supabase()
+
+    try:
+        result = (
+            supabase.table("fine_tune_dataset")
+            .select("*")
+            .order("id", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Could not load dataset rows: {e!s}",
+        ) from e
+
+    rows_out = []
+    for r in result.data or []:
+        text = str(r.get("complaint_text") or "")
+        preview = text if len(text) <= 200 else text[:200] + "…"
+        rows_out.append(
+            {
+                "id": r.get("id"),
+                "complaint_id": r.get("complaint_id"),
+                "category": r.get("category"),
+                "agent_rating": r.get("agent_rating"),
+                "customer_rating": r.get("customer_rating"),
+                "combined_score": r.get("combined_score"),
+                "exported": r.get("exported"),
+                "created_at": r.get("created_at"),
+                "complaint_preview": preview,
+            }
+        )
+
+    return {
+        "limit": limit,
+        "count": len(rows_out),
+        "records": rows_out,
+        "source_note": (
+            "Each row is one training example accumulated after agent feedback "
+            "(Approve / edit draft / reject) on the complaint detail screen, "
+            "saved asynchronously to fine_tune_dataset."
+        ),
+    }
+
+
 @router.post(
     "/customer",
     status_code=status.HTTP_201_CREATED,

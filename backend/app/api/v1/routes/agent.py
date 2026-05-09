@@ -30,6 +30,7 @@ from app.services.queue_service import (
 )
 from app.services.dashboard_aggregator import get_agent_metrics, get_team_metrics
 from app.services.metrics_service import track_review_started
+from app.utils.postgrest_errors import is_missing_relation_error
 
 logger = logging.getLogger(__name__)
 
@@ -74,15 +75,20 @@ def get_queue(
     supabase = get_supabase()
     statuses = [s.strip() for s in status_filter.split(",")]
 
-    queue_result = (
-        supabase.table("agent_queue")
-        .select("*")
-        .eq("tier_level", tier_level)
-        .in_("status", statuses)
-        .order("priority_score", desc=True)
-        .execute()
-    )
-    rows = queue_result.data or []
+    try:
+        queue_result = (
+            supabase.table("agent_queue")
+            .select("*")
+            .eq("tier_level", tier_level)
+            .in_("status", statuses)
+            .order("priority_score", desc=True)
+            .execute()
+        )
+        rows = queue_result.data or []
+    except Exception as exc:
+        if not is_missing_relation_error(exc):
+            raise
+        rows = []
 
     complaint_ids = [r["complaint_id"] for r in rows]
     complaints_meta: dict = {}

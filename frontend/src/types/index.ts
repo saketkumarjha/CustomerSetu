@@ -1,5 +1,14 @@
 // ── Navigation ────────────────────────────────────────────────────────────────
-export type TabId = 'overview' | 'complaints' | 'submit' | 'pipeline' | 'analytics' | 'rbi' | 'sla'
+export type TabId =
+  | 'overview'
+  | 'complaints'
+  | 'agentDesk'
+  | 'submit'
+  | 'pipeline'
+  | 'analytics'
+  | 'feedback'
+  | 'rbi'
+  | 'sla'
 
 // ── Frontend display types (also used for mock data) ─────────────────────────
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low'

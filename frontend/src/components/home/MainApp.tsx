@@ -10,6 +10,8 @@ import { PipelineTab } from '../pipeline/PipelineTab'
 import { AnalyticsTab } from '../analytics/AnalyticsTab'
 import { RBITab } from '../rbi/RBITab'
 import { SLATab } from '../sla/SLATab'
+import { FeedbackTab } from '../feedback/FeedbackTab'
+import { AgentDeskTab } from '../agent/AgentDeskTab'
 
 export function MainApp() {
   const [active, setActive] = useState<TabId>('overview')
@@ -36,9 +38,11 @@ export function MainApp() {
 
           {active === 'overview'    && <OverviewTab setActive={setActive} />}
           {active === 'complaints'  && <ComplaintsTab setActive={setActive} />}
+          {active === 'agentDesk'   && <AgentDeskTab />}
           {active === 'submit'      && <SubmitTab setActive={setActive} />}
           {active === 'pipeline'    && <PipelineTab />}
           {active === 'analytics'   && <AnalyticsTab />}
+          {active === 'feedback'    && <FeedbackTab />}
           {active === 'rbi'         && <RBITab />}
           {active === 'sla'         && <SLATab />}
         </main>
