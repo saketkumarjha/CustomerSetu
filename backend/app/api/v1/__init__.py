@@ -9,6 +9,7 @@ from app.api.v1.routes import (
     sla,
     agent,
     kb_admin,
+    channels,
 )
 
 api_v1_router = APIRouter()
@@ -57,4 +58,9 @@ api_v1_router.include_router(
     kb_admin.router,
     prefix="/admin/kb",
     tags=["KB Admin"],
+)
+api_v1_router.include_router(
+    channels.router,
+    prefix="/channels",
+    tags=["Channel Demo"],
 )
