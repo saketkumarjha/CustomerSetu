@@ -131,7 +131,7 @@ export function ComplaintsTab({ setActive }: { setActive?: (id: TabId) => void }
   const enrichedSelected: Complaint | null = selected && apiComplaintDetail
     ? {
         ...selected,
-        description: apiComplaintDetail.masked_text ?? selected.description,
+        description: apiComplaintDetail.masked_text ?? apiComplaintDetail.merged_text ?? selected.description,
         agentResult: {
           ...selected.agentResult,
           resolution: apiComplaintDetail.draft_response ?? selected.agentResult.resolution,

@@ -1,20 +1,27 @@
-# Python
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+.eggs/
+
+# Python cache
 __pycache__/
+*.pyc
 *.py[cod]
 *.pyo
 *.pyd
 .Python
 *.egg
 *.egg-info/
-dist/
-build/
-.eggs/
-.venv/
-venv/
-env/
-*.env
 
-# Node
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+
+# Node modules
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -24,17 +31,9 @@ yarn-error.log*
 *.log
 server.log
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Build output
+dist/
+build/
 frontend/dist/
 frontend/build/
 
@@ -42,7 +41,12 @@ frontend/build/
 *.db
 *.sqlite
 
-# Secrets
-.env
-.env.local
-.env.production
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
