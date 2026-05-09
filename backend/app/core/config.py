@@ -34,9 +34,69 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     max_file_size_mb: int = 10
 
+    # Notification gateways (leave blank to use simulation in prototype)
+    email_gateway_url: str = ""
+    email_from_address: str = "customercare@unionbankofindia.com"
+    sms_gateway_url: str = ""
+    sms_api_key: str = ""
+
+    # Response templates
+    tier_templates_path: str = "app/templates/tier_responses/"
+
+    # Knowledge base enrichment
+    enable_auto_kb_enrichment: bool = True
+    kb_enrichment_delay_hours: int = 24
+
+    # KB enrichment quality thresholds
+    kb_auto_approve_threshold: float = 0.95   # auto-add to KB without admin review
+    kb_review_threshold:       float = 0.70   # minimum quality to enter queue
+    kb_min_resolution_length:  int   = 50     # chars
+    kb_max_resolution_length:  int   = 5000   # chars
+    kb_max_escalations:        int   = 3      # skip if more than N escalations
+    kb_queue_retention_days:   int   = 90     # days to keep processed queue rows
+    kb_notify_queue_threshold: int   = 50     # alert when pending queue exceeds N
+
+    # Notification retries
+    notification_retry_count: int = 3
+    notification_timeout_seconds: int = 10
+
+    # Agent queue
+    agent_max_workload: int = 5
+    agent_queue_refresh_interval: int = 30   # seconds
+    agent_notification_channels: list = ["email", "slack", "push"]
+
+    # Auto-Escalation (Route 3)
+    max_escalation_iterations: int = 5       # hard limit on escalation hops
+    max_escalation_tier: int = 5             # Tier 5 = RBI Ombudsman (external)
+    escalation_cache_ttl_seconds: int = 30   # anti-rapid-fire window per tier
+    min_escalation_interval_seconds: int = 10
+    enable_escalation_loop_detection: bool = True
+
+    # Tier → agent mapping (overridable via env as JSON string)
+    tier_agent_mapping: dict = {
+        0: ["agent_001", "agent_002", "agent_003"],
+        1: ["agent_101", "agent_102"],
+        2: ["agent_201"],
+        3: ["agent_301"],
+        4: ["agent_401"],
+    }
+
+    # Agent specialisation map
+    agent_specialization: dict = {
+        "agent_001": ["UPI", "ATM", "Cards"],
+        "agent_002": ["General Banking", "Savings Account"],
+        "agent_003": ["Internet Banking", "Mobile Banking"],
+        "agent_101": ["Branch Services", "Locker", "KYC"],
+        "agent_102": ["Home Loan", "Personal Loan"],
+        "agent_201": ["Business Loan", "Insurance"],
+        "agent_301": ["Regional Compliance", "Mis-selling"],
+        "agent_401": ["Nodal Office", "Fraud", "RBI Escalation"],
+    }
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"
 
 
 @lru_cache()

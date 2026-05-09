@@ -1,37 +1,39 @@
 """
-Tiered Auto-Response System
+Auto Responder — Tier 1 (Full Auto) Only
 
-4 tiers based on confidence score + safety checks:
+Responsibility (after Agent 10.5 refactor):
+  This file handles ONLY Tier 1 — Full Auto-Send.
+  Called when routing_agent.py returns route = "AUTO" (confidence >= 0.95).
 
-TIER 1 — Full Auto-Send (confidence >= 0.95)
-  Customer ko direct response jaata hai
-  No human involvement
-  Conditions: low severity + no RBI flag + calm/concerned sentiment
+  Tier 2 (Shadow Mode)      → Agent 10.5 (escalation_analyzer.py)
+  Tier 3 (Human Review)     → Agent 10.5 (escalation_analyzer.py)
+  Tier 4 (Priority Human)   → Agent 10.5 (escalation_analyzer.py)
 
-TIER 2 — Shadow Mode (confidence 0.80-0.95)
-  Customer ko auto-send hota hai
-  Human agent ko notification milti hai
-  Agent 1 hour mein override kar sakta hai
-  If override → apology send hoti hai customer ko
-
-TIER 3 — Human Review Queue (confidence 0.70-0.80)
-  Normal human review
-  Agent accept/edit/reject karta hai
-
-TIER 4 — Priority Human Review (confidence < 0.70)
-  Urgent flag
-  Senior agent assign hota hai
-  SLA half ho jaata hai
+Flow:
+  routing_agent.py
+      └── route == "AUTO"
+              └── execute_auto_response()   ← only entry point now
+                      └── format_for_tier()        (ResponseFormatter)
+                      └── simulate send to customer
+                      └── status: auto_closed
+                      └── log to notification_log
+                      └── save to fine_tune_dataset
 """
 
-from datetime import datetime, timezone, timedelta
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
 from app.db.supabase_client import get_supabase
+from app.services.response_formatter import format_for_tier
+
+logger = logging.getLogger(__name__)
 
 
-# Sentiments jo auto-send ke liye safe hain
+# ── Constants ────────────────────────────────────────────────────────────────
+
 SAFE_SENTIMENTS_FOR_AUTO = {"Calm", "Concerned"}
 
-# Yeh categories KABHI auto-send nahi hongi
 NEVER_AUTO_SEND_CATEGORIES = {
     "UNAUTHORIZED_TRANSACTION_FRAUD",
     "RECOVERY_AGENT_HARASSMENT",
@@ -41,126 +43,8 @@ NEVER_AUTO_SEND_CATEGORIES = {
     "CREDIT_BUREAU_MISREPORTING",
 }
 
-# Shadow mode mein agent ke paas kitna time hai override ke liye
-SHADOW_OVERRIDE_WINDOW_HOURS = 1
 
-
-def determine_response_tier(
-    confidence_score: float,
-    severity: int,
-    sentiment: str,
-    is_rbi_reportable: bool,
-    compliance_category: str,
-    grounding_score: float,
-    grounding_assessment: str,
-) -> dict:
-    """
-    Confidence + safety checks ke basis pe tier decide karo.
-
-    Returns:
-        tier:        "full_auto" | "shadow" | "human_review" | "priority_human"
-        tier_number: 1 | 2 | 3 | 4
-        can_auto:    bool
-        reason:      kyun yeh tier assign hua
-        sla_hours:   is tier ke liye SLA
-    """
-
-    # ── Safety checks — override karte hain confidence ko ─────────────────
-    safety_blocks = []
-
-    if is_rbi_reportable:
-        safety_blocks.append("RBI reportable complaint — auto-send blocked")
-
-    if compliance_category in NEVER_AUTO_SEND_CATEGORIES:
-        safety_blocks.append(f"{compliance_category} — mandatory human review")
-
-    if severity >= 4:
-        safety_blocks.append(f"Severity {severity}/5 — too high for auto-send")
-
-    if sentiment not in SAFE_SENTIMENTS_FOR_AUTO and confidence_score < 0.95:
-        safety_blocks.append(f"Sentiment '{sentiment}' — human empathy needed")
-
-    if grounding_assessment == "DO_NOT_SEND":
-        safety_blocks.append("Grounding check failed — draft has issues")
-
-    if grounding_score < 0.60:
-        safety_blocks.append(f"Low grounding score ({grounding_score:.0%})")
-
-    # ── Safety block hai → directly human review ──────────────────────────
-    if safety_blocks:
-        if confidence_score < 0.70:
-            return {
-                "tier": "priority_human",
-                "tier_number": 4,
-                "can_auto": False,
-                "reason": f"Safety blocks + low confidence. Issues: {'; '.join(safety_blocks)}",
-                "sla_hours": 4,      # half the normal SLA
-                "safety_blocks": safety_blocks,
-            }
-        return {
-            "tier": "human_review",
-            "tier_number": 3,
-            "can_auto": False,
-            "reason": f"Safety blocks present. Issues: {'; '.join(safety_blocks)}",
-            "sla_hours": 24,
-            "safety_blocks": safety_blocks,
-        }
-
-    # ── No safety blocks → confidence pe tier decide karo ─────────────────
-
-    if confidence_score >= 0.95:
-        return {
-            "tier": "full_auto",
-            "tier_number": 1,
-            "can_auto": True,
-            "reason": (
-                f"Confidence {confidence_score:.0%} >= 95% threshold. "
-                f"Severity {severity}/5. Sentiment: {sentiment}. "
-                f"No RBI flags. Full auto-send approved."
-            ),
-            "sla_hours": 1,
-            "safety_blocks": [],
-        }
-
-    if confidence_score >= 0.80:
-        return {
-            "tier": "shadow",
-            "tier_number": 2,
-            "can_auto": True,
-            "reason": (
-                f"Confidence {confidence_score:.0%} — 80-95% range. "
-                f"Auto-sending with {SHADOW_OVERRIDE_WINDOW_HOURS}hr human override window."
-            ),
-            "sla_hours": 2,
-            "safety_blocks": [],
-        }
-
-    if confidence_score >= 0.70:
-        return {
-            "tier": "human_review",
-            "tier_number": 3,
-            "can_auto": False,
-            "reason": (
-                f"Confidence {confidence_score:.0%} — 70-80% range. "
-                f"Human review required."
-            ),
-            "sla_hours": 24,
-            "safety_blocks": [],
-        }
-
-    # confidence < 0.70
-    return {
-        "tier": "priority_human",
-        "tier_number": 4,
-        "can_auto": False,
-        "reason": (
-            f"Confidence {confidence_score:.0%} < 70%. "
-            f"Low confidence — priority human review flagged."
-        ),
-        "sla_hours": 4,
-        "safety_blocks": [],
-    }
-
+# ── Main Entry Point ─────────────────────────────────────────────────────────
 
 def execute_auto_response(
     complaint_id: str,
@@ -169,208 +53,135 @@ def execute_auto_response(
     draft_response: str,
     tier: str,
     confidence_score: float,
+    tier_level: int = 1,
+    customer_name: str = "Valued Customer",
+    issue_summary: str = "your recent complaint",
+    sla_deadline: Optional[str] = None,
+    scope_id: Optional[str] = None,
 ) -> dict:
     """
-    Auto-response execute karo based on tier.
+    Tier 1 (full_auto) complaints ka auto-response execute karo.
 
-    TIER 1 (full_auto):
-      → Customer ko send karo
-      → Status: closed
-      → CSAT survey schedule karo
+    Called by pipeline ONLY when:
+      - routing_agent returned route == "AUTO"
+      - confidence_score >= 0.95
+      - No override rules triggered
 
-    TIER 2 (shadow):
-      → Customer ko send karo
-      → Human agent ko notification
-      → Override deadline set karo
-      → Status: shadow_sent
+    Args:
+        complaint_id    : Unique complaint ID
+        customer_id     : Customer identifier
+        channel         : "email" | "whatsapp" | "web" | "sms"
+        draft_response  : Agent 8 ka generated response (grounding-passed)
+        tier            : Expected "full_auto"
+        confidence_score: Pipeline confidence (should be >= 0.95)
+        tier_level      : Complaint's current tier (1–4, default 1)
+        customer_name   : For personalised greeting
+        issue_summary   : One-line issue description
+        sla_deadline    : ISO datetime for RBI TAT deadline
+        scope_id        : Branch/zone ID for specific contact lookup
 
-    TIER 3/4 (human_review / priority_human):
-      → Yeh function call nahi hoga — router handle karta hai
+    Returns:
+        action_taken          : "full_auto_sent" | "none"
+        sent_to_customer      : bool
+        human_notified        : bool (always False for Tier 1)
+        status                : "auto_closed" | None
+        message               : Human-readable result
+        formatted_response    : str — final message that was sent
+        escalation_info       : dict — escalation timeline info
+        notification_channel  : str
+        customer_notified_at  : ISO datetime string
     """
     supabase = get_supabase()
     now = datetime.now(timezone.utc)
 
-    if tier == "full_auto":
-        # ── Simulate send karo (POC) ───────────────────────────────────────
-        _simulate_send_to_customer(
-            customer_id=customer_id,
-            channel=channel,
-            draft_response=draft_response,
-            send_type="FULL_AUTO",
-            complaint_id=complaint_id,
-        )
-
-        # ── DB update ─────────────────────────────────────────────────────
-        supabase.table("complaints").update({
-            "status": "auto_closed",
-            "pipeline_status": "complete",
-            "response_tier": "full_auto",
-            "auto_sent_at": now.isoformat(),
-        }).eq("complaint_id", complaint_id).execute()
-
-        # ── Fine-tune dataset mein save karo ──────────────────────────────
-        _save_auto_response_to_dataset(
-            complaint_id=complaint_id,
-            draft_response=draft_response,
-            tier=tier,
-            agent_score=1.0,   # auto-sent = highest confidence
-        )
-
+    if tier != "full_auto":
         return {
-            "action_taken": "full_auto_sent",
-            "sent_to_customer": True,
-            "human_notified": False,
-            "status": "auto_closed",
-            "message": f"Response auto-sent to customer via {channel}.",
-        }
-
-    elif tier == "shadow":
-        # ── Customer ko send karo ─────────────────────────────────────────
-        _simulate_send_to_customer(
-            customer_id=customer_id,
-            channel=channel,
-            draft_response=draft_response,
-            send_type="SHADOW_AUTO",
-            complaint_id=complaint_id,
-        )
-
-        override_deadline = now + timedelta(hours=SHADOW_OVERRIDE_WINDOW_HOURS)
-
-        # ── Human agent ko notify karo ────────────────────────────────────
-        _notify_human_agent(
-            complaint_id=complaint_id,
-            draft_response=draft_response,
-            confidence_score=confidence_score,
-            override_deadline=override_deadline,
-        )
-
-        # ── DB update ─────────────────────────────────────────────────────
-        supabase.table("complaints").update({
-            "status": "shadow_sent",
-            "pipeline_status": "complete",
-            "response_tier": "shadow",
-            "auto_sent_at": now.isoformat(),
-            "shadow_override_deadline": override_deadline.isoformat(),
-            "shadow_overridden": False,
-        }).eq("complaint_id", complaint_id).execute()
-
-        return {
-            "action_taken": "shadow_auto_sent",
-            "sent_to_customer": True,
-            "human_notified": True,
-            "override_deadline": override_deadline.isoformat(),
-            "override_window_hours": SHADOW_OVERRIDE_WINDOW_HOURS,
-            "status": "shadow_sent",
+            "action_taken":       "none",
+            "sent_to_customer":   False,
+            "human_notified":     False,
+            "status":             None,
+            "formatted_response": None,
+            "escalation_info":    None,
+            "notification_channel": channel,
+            "customer_notified_at": None,
             "message": (
-                f"Response auto-sent to customer. "
-                f"Human agent has {SHADOW_OVERRIDE_WINDOW_HOURS}hr to override."
+                f"Tier '{tier}' is not handled by auto_responder. "
+                "Tier 2/3/4 routing is managed by Agent 10.5 (escalation_analyzer)."
             ),
         }
 
-    return {"action_taken": "none", "sent_to_customer": False}
-
-
-def execute_shadow_override(
-    complaint_id: str,
-    agent_id: str,
-    corrected_response: str,
-    override_reason: str,
-) -> dict:
-    """
-    Shadow mode mein human agent override karta hai.
-
-    Steps:
-    1. Check karo ki override window abhi valid hai
-    2. Customer ko corrected response send karo
-    3. Apology note bhi send karo (auto-send was wrong)
-    4. DB update karo
-    5. Penalty: auto-sent draft ko negative score do dataset mein
-    """
-    supabase = get_supabase()
-    now = datetime.now(timezone.utc)
-
-    # Complaint fetch karo
-    result = (
-        supabase.table("complaints")
-        .select(
-            "complaint_id, status, shadow_override_deadline, "
-            "shadow_overridden, customer_id, channel, draft_response"
-        )
-        .eq("complaint_id", complaint_id)
-        .execute()
+    # ── 1. Format tier-appropriate response ──────────────────────────────────
+    fmt_result = format_for_tier(
+        draft_response = draft_response,
+        tier_level     = tier_level,
+        complaint_id   = complaint_id,
+        customer_name  = customer_name,
+        issue_summary  = issue_summary,
+        channel        = channel,
+        sla_deadline   = sla_deadline,
+        scope_id       = scope_id,
     )
+    formatted_response = fmt_result["formatted_response"]
+    escalation_info    = fmt_result["escalation_info"]
 
-    if not result.data:
-        raise ValueError(f"Complaint {complaint_id} not found")
-
-    complaint = result.data[0]
-
-    # Status check
-    if complaint.get("status") != "shadow_sent":
-        raise ValueError(
-            f"Complaint is not in shadow mode. "
-            f"Current status: {complaint.get('status')}"
-        )
-
-    # Override already hua?
-    if complaint.get("shadow_overridden"):
-        raise ValueError("Shadow override already applied for this complaint")
-
-    # Override window check
-    deadline_str = complaint.get("shadow_override_deadline")
-    if deadline_str:
-        deadline = datetime.fromisoformat(deadline_str.replace("Z", "+00:00"))
-        if now > deadline:
-            raise ValueError(
-                f"Override window expired at {deadline.isoformat()}. "
-                f"Cannot override after {SHADOW_OVERRIDE_WINDOW_HOURS} hours."
-            )
-
-    # ── Corrected response send karo ──────────────────────────────────────
+    # ── 2. Send to customer ───────────────────────────────────────────────────
     _simulate_send_to_customer(
-        customer_id=complaint.get("customer_id", ""),
-        channel=complaint.get("channel", "web"),
-        draft_response=corrected_response,
-        send_type="SHADOW_OVERRIDE_CORRECTION",
-        complaint_id=complaint_id,
+        customer_id    = customer_id,
+        channel        = channel,
+        draft_response = formatted_response,
+        send_type      = "FULL_AUTO",
+        complaint_id   = complaint_id,
     )
 
-    # ── DB update ─────────────────────────────────────────────────────────
-    supabase.table("complaints").update({
-        "status": "override_closed",
-        "shadow_overridden": True,
-    }).eq("complaint_id", complaint_id).execute()
+    # ── 3. DB update — complaint record ──────────────────────────────────────
+    db_payload = {
+        "status":               "auto_closed",
+        "pipeline_status":      "complete",
+        "response_tier":        "full_auto",
+        "auto_sent_at":         now.isoformat(),
+        "final_response_text":  formatted_response,
+        "response_sent_at":     now.isoformat(),
+        "response_channel":     channel,
+        "tier_resolved_at":     tier_level,
+    }
+    try:
+        supabase.table("complaints").update(db_payload).eq(
+            "complaint_id", complaint_id
+        ).execute()
+    except Exception as exc:
+        logger.error("[AUTO] DB update failed for %s: %s", complaint_id, exc)
 
-    # ── Agent feedback store karo ─────────────────────────────────────────
-    supabase.table("agent_feedback").insert({
-        "complaint_id": complaint_id,
-        "agent_id": agent_id,
-        "action": "edit",
-        "original_draft": complaint.get("draft_response", ""),
-        "final_response": corrected_response,
-        "agent_score": 0.5,   # edit = 0.5
-    }).execute()
+    # ── 4. notification_log (best-effort) ────────────────────────────────────
+    _log_notification(
+        complaint_id = complaint_id,
+        channel      = channel,
+        tier_level   = tier_level,
+        confidence   = confidence_score,
+        sent_at      = now,
+    )
 
-    # ── Dataset mein negative signal ──────────────────────────────────────
-    # Auto-sent draft wrong tha — dataset mein 0.0 score
+    # ── 5. Save to fine-tune dataset ─────────────────────────────────────────
     _save_auto_response_to_dataset(
-        complaint_id=complaint_id,
-        draft_response=complaint.get("draft_response", ""),
-        tier="shadow_overridden",
-        agent_score=0.0,
+        complaint_id   = complaint_id,
+        draft_response = draft_response,
+        tier           = tier,
+        agent_score    = 1.0,
     )
 
     return {
-        "complaint_id": complaint_id,
-        "override_applied": True,
-        "corrected_response_sent": True,
-        "agent_id": agent_id,
-        "override_reason": override_reason,
-        "message": "Override applied. Corrected response sent to customer.",
+        "action_taken":         "full_auto_sent",
+        "sent_to_customer":     True,
+        "human_notified":       False,
+        "status":               "auto_closed",
+        "formatted_response":   formatted_response,
+        "escalation_info":      escalation_info,
+        "notification_channel": channel,
+        "customer_notified_at": now.isoformat(),
+        "message":              f"Response auto-sent to customer via {channel}.",
     }
 
 
-# ── Private helpers ───────────────────────────────────────────────────────────
+# ── Private Helpers ───────────────────────────────────────────────────────────
 
 def _simulate_send_to_customer(
     customer_id: str,
@@ -380,37 +191,50 @@ def _simulate_send_to_customer(
     complaint_id: str,
 ) -> None:
     """
-    POC mein simulate karte hain — logs mein print karte hain.
-    Production mein: SendGrid (email), Twilio (SMS/WhatsApp), WebSocket (web)
+    POC: simulate customer send via console output.
+
+    Production replacement:
+      channel == "email"     → SendGrid / SES
+      channel == "whatsapp"  → Twilio WhatsApp Business API
+      channel == "sms"       → Twilio SMS
+      channel == "web"       → WebSocket / push notification
     """
+    gateway = {
+        "email":     "SendGrid Email",
+        "whatsapp":  "Twilio WhatsApp",
+        "sms":       "Twilio SMS",
+    }.get(channel, "Web Notification")
+
     print(f"\n{'='*60}")
-    print(f"[AUTO-SEND] Type: {send_type}")
-    print(f"[AUTO-SEND] Complaint: {complaint_id}")
-    print(f"[AUTO-SEND] Customer: {customer_id}")
-    print(f"[AUTO-SEND] Channel: {channel}")
-    print(f"[AUTO-SEND] Response preview: {draft_response[:100]}...")
-    print(f"[AUTO-SEND] Would send via: "
-          f"{'SendGrid Email' if channel == 'email' else 'Twilio WhatsApp' if channel == 'whatsapp' else 'Web Notification'}")
+    print(f"[AUTO-SEND] Type        : {send_type}")
+    print(f"[AUTO-SEND] Complaint   : {complaint_id}")
+    print(f"[AUTO-SEND] Customer    : {customer_id}")
+    print(f"[AUTO-SEND] Channel     : {channel}")
+    print(f"[AUTO-SEND] Preview     : {draft_response[:120]}...")
+    print(f"[AUTO-SEND] Gateway     : {gateway}")
     print(f"{'='*60}\n")
 
 
-def _notify_human_agent(
+def _log_notification(
     complaint_id: str,
-    draft_response: str,
-    confidence_score: float,
-    override_deadline: datetime,
+    channel: str,
+    tier_level: int,
+    confidence: float,
+    sent_at: datetime,
 ) -> None:
-    """
-    Shadow mode mein human agent ko notify karo.
-    Production mein: Email/Slack/Dashboard notification.
-    """
-    print(f"\n{'='*60}")
-    print(f"[SHADOW NOTIFY] Complaint: {complaint_id}")
-    print(f"[SHADOW NOTIFY] Confidence: {confidence_score:.0%}")
-    print(f"[SHADOW NOTIFY] Auto-sent to customer.")
-    print(f"[SHADOW NOTIFY] You have until {override_deadline.strftime('%H:%M UTC')} to override.")
-    print(f"[SHADOW NOTIFY] Override: POST /api/v1/complaints/{complaint_id}/shadow-override")
-    print(f"{'='*60}\n")
+    """Insert a row into notification_log (best-effort — table may not exist yet)."""
+    supabase = get_supabase()
+    try:
+        supabase.table("notification_log").insert({
+            "complaint_id": complaint_id,
+            "channel":      channel,
+            "status":       "sent",
+            "sent_at":      sent_at.isoformat(),
+            "tier_level":   tier_level,
+            "confidence":   confidence,
+        }).execute()
+    except Exception as exc:
+        logger.debug("[AUTO] notification_log insert failed (table may not exist): %s", exc)
 
 
 def _save_auto_response_to_dataset(
@@ -419,7 +243,12 @@ def _save_auto_response_to_dataset(
     tier: str,
     agent_score: float,
 ) -> None:
-    """Auto-send kiye gaye responses ko fine-tune dataset mein save karo."""
+    """
+    Save Tier 1 auto-sent responses to fine_tune_dataset.
+
+    agent_score:
+      1.0 → full_auto sent (highest confidence, no human correction)
+    """
     supabase = get_supabase()
     try:
         complaint = (
@@ -430,13 +259,13 @@ def _save_auto_response_to_dataset(
         )
         if complaint.data:
             supabase.table("fine_tune_dataset").insert({
-                "complaint_id": complaint_id,
-                "complaint_text": complaint.data[0].get("masked_text", ""),
-                "ai_draft": draft_response,
+                "complaint_id":             complaint_id,
+                "complaint_text":           complaint.data[0].get("masked_text", ""),
+                "ai_draft":                 draft_response,
                 "agent_corrected_response": draft_response,
-                "agent_rating": agent_score,
-                "category": complaint.data[0].get("category", "General Banking"),
-                "exported": False,
+                "agent_rating":             agent_score,
+                "category":                 complaint.data[0].get("category", "General Banking"),
+                "exported":                 False,
             }).execute()
-    except Exception as e:
-        print(f"[DATASET] Save failed: {e}")
+    except Exception as exc:
+        logger.error("[DATASET] Save failed for %s: %s", complaint_id, exc)

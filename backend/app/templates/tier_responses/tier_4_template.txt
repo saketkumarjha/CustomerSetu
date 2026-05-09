@@ -1,0 +1,31 @@
+{bank_name} — Nodal Officer / Head Office
+Date: {date_today}
+
+Dear {customer_name},
+
+Your complaint regarding {issue_summary} has been reviewed at the highest internal
+authority level — the Nodal Officer / Head Office. We have thoroughly examined all
+aspects of your complaint and provide the following resolution.
+
+RESOLUTION
+----------
+{draft_response}
+
+CONTACT — {tier_name}
+----------
+  Phone   : {contact_phone}
+  Email   : {contact_email}
+  Hours   : {contact_hours}
+  Address : {contact_address}
+
+ESCALATION INFORMATION
+----------------------
+{escalation_msg}
+
+Complaint Reference : {complaint_id}
+Track your complaint: {bank_site}/complaint-tracking
+
+Regards,
+Nodal Officer
+{bank_name}
+Toll-Free: {toll_free}

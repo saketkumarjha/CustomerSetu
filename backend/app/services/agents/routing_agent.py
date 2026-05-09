@@ -1,28 +1,60 @@
 """
-Risk-Aware Router — Final Supervisor Decision
+Risk-Aware Router — Modified for Agent 10.5 Compatibility
 
-This is NOT a GPT-4o call. It is the Supervisor's deterministic
-decision engine that combines all agent signals into a final routing decision.
+Agent 10: Primary Router (Modified)
+-------------------------------------
+This is NOT a GPT-4o call. It is a deterministic decision engine.
 
-Decision flow:
-1. Check RBI override rules → if triggered → HUMAN_REVIEW (no further checks)
-2. Check confidence vs per-category threshold → if below → HUMAN_REVIEW
-3. Calculate risk score from all signals → if above threshold → HUMAN_REVIEW
-4. All checks pass → AUTO_RESPOND
+NEW Decision flow:
+1. Check RBI override rules
+   - FRAUD                → force tier_hint=4, route=HUMAN
+   - Furious sentiment    → route=HUMAN
+   - Severity 5           → route=HUMAN
+   If any override fires  → return immediately, skip confidence check
+
+2. Confidence gate (single threshold: 0.95)
+   - confidence >= 0.95   → route=AUTO,    pipeline ends here
+   - confidence <  0.95   → route=ESCALATE, hand off to Agent 10.5
+
+3. Risk score is ALWAYS calculated (for XAI audit + Agent 10.5 pass-through)
+   but it does NOT affect routing in Agent 10.
+
+Output keys:
+  route            : "AUTO" | "HUMAN" | "ESCALATE"
+  confidence       : float
+  sla_deadline     : ISO datetime string or None
+  override_triggered : bool
+  override_rules   : list[str]
+  tier_hint        : int | None  (4 when fraud override, else None — Agent 10.5 decides)
+  risk_score       : float       (pass-through for Agent 10.5)
+  risk_breakdown   : dict        (pass-through for Agent 10.5)
+  reasoning        : str         (XAI audit trail)
 
 Why deterministic (not LLM-based):
   Routing decisions that affect SLAs, regulatory compliance, and customer
   outcomes must be fully auditable and reproducible. An LLM might make
   different routing decisions for identical inputs. A deterministic algorithm
-  always produces the same output for the same inputs — required for
-  RBI audit compliance.
+  always produces the same output — required for RBI audit compliance.
 """
 
 from datetime import datetime, timezone
 from app.services.rbi.override_rules import check_override_rules
 from app.services.rbi.tat_rules import calculate_tat_deadline
 from app.services.agents.resolution_agent import CATEGORY_CONFIDENCE_THRESHOLDS
-from app.services.auto_responder import determine_response_tier
+
+# ── Constants ────────────────────────────────────────────────────────────────
+
+AUTO_RESPOND_CONFIDENCE_GATE = 0.95  # Below this → Agent 10.5 decides tier
+
+# Override categories that imply minimum Tier 4 (Head Office / Nodal Officer)
+FRAUD_CATEGORIES = {
+    "UNAUTHORIZED_TRANSACTION_FRAUD",
+    "PHISHING_FRAUD",
+    "ACCOUNT_TAKEOVER",
+}
+
+
+# ── Risk Score (kept for XAI + Agent 10.5 pass-through) ─────────────────────
 
 def calculate_risk_score(
     severity_score: float,
@@ -35,20 +67,23 @@ def calculate_risk_score(
     """
     Calculate composite risk score from all upstream agent signals.
 
-    Risk score formula (max = 1.0):
-      severity component:    severity_score/10 * 0.30  (30% weight)
-      confidence component:  (1 - confidence) * 0.25   (25% weight)
-      rbi component:         0.25 if RBI reportable     (25% weight)
-      urgency component:     urgency_score/10 * 0.10   (10% weight)
-      grounding component:   (1 - grounding) * 0.10    (10% weight)
+    NOTE: This score no longer drives the routing decision in Agent 10.
+    It is calculated purely for:
+      - XAI / audit trail (agent_decisions table)
+      - Pass-through to Agent 10.5 (Escalation Analyzer)
 
-    Returns dict with score and breakdown for XAI.
+    Risk score formula (max = 1.0):
+      severity   : severity_score/10  * 0.30
+      confidence : (1 - confidence)   * 0.25
+      rbi        : 0.25 if reportable
+      urgency    : urgency_score/10   * 0.10
+      grounding  : (1 - grounding)    * 0.10
     """
-    severity_component = (severity_score / 10) * 0.30
+    severity_component   = (severity_score / 10) * 0.30
     confidence_component = (1 - confidence_score) * 0.25
-    rbi_component = 0.25 if is_rbi_reportable else 0.0
-    urgency_component = (urgency_score / 10) * 0.10
-    grounding_component = (1 - grounding_score) * 0.10
+    rbi_component        = 0.25 if is_rbi_reportable else 0.0
+    urgency_component    = (urgency_score / 10) * 0.10
+    grounding_component  = (1 - grounding_score) * 0.10
 
     total = (
         severity_component
@@ -62,42 +97,47 @@ def calculate_risk_score(
     return {
         "risk_score": total,
         "breakdown": {
-            "severity_component": round(severity_component, 4),
+            "severity_component":   round(severity_component, 4),
             "confidence_component": round(confidence_component, 4),
-            "rbi_component": round(rbi_component, 4),
-            "urgency_component": round(urgency_component, 4),
-            "grounding_component": round(grounding_component, 4),
+            "rbi_component":        round(rbi_component, 4),
+            "urgency_component":    round(urgency_component, 4),
+            "grounding_component":  round(grounding_component, 4),
         },
     }
 
 
+# ── Main Routing Decision ────────────────────────────────────────────────────
+
 def make_routing_decision(
-    # From pipeline state
+    # Complaint identity
     complaint_id: str,
     category: str,
+    # From Compliance Agent (Agent 5)
     compliance_category: str,
     is_rbi_reportable: bool,
+    # From Sentiment Agent (Agent 4)
     sentiment: str,
+    # From Severity Agent (Agent 6)
     severity: int,
     severity_score: float,
     urgency_score: float,
     escalation_flag: bool,
+    # From Resolution Agent (Agent 8)
     confidence_score: float,
+    # From Grounding Agent (Agent 9)
     grounding_score: float,
     grounding_assessment: str,
 ) -> dict:
     """
-    Make the final routing decision for a complaint.
+    Make the primary routing decision for a complaint.
 
+    Returns AUTO, HUMAN (with tier_hint), or ESCALATE (to Agent 10.5).
     Decision is fully deterministic — same inputs always produce same output.
-    Every decision point is logged for XAI and RBI audit trail.
-
-    Returns complete routing decision with XAI reasoning.
     """
     reasoning_steps = []
     routing_factors = []
 
-    # ── Step 1: Check override rules ──────────────────────────────────────
+    # ── Step 1: Override Rules ───────────────────────────────────────────────
     override = check_override_rules(
         compliance_category=compliance_category,
         sentiment=sentiment,
@@ -106,74 +146,72 @@ def make_routing_decision(
         escalation_flag=escalation_flag,
         grounding_assessment=grounding_assessment,
     )
-    override_triggered = override.get("override_triggered", False)
-    override_rules_hit = override.get("override_rules_hit", [])
+    override_triggered  = override.get("override_triggered", False)
+    override_rules_hit  = override.get("override_rules_hit", [])
 
     if override_triggered:
-        # Override fires — skip all other checks
-        # RBI compliance always wins
         for rule in override_rules_hit:
-            reasoning_steps.append(f"🚨 OVERRIDE: {rule}")
+            reasoning_steps.append(f"OVERRIDE TRIGGERED: {rule}")
             routing_factors.append(rule)
 
+        # Determine tier_hint from override type
+        # Fraud → minimum Tier 4 (Head Office / Nodal Officer)
+        # Furious / Severity 5 → Human review, Agent 10.5 will assign tier
+        is_fraud_override = compliance_category in FRAUD_CATEGORIES
+        tier_hint = 4 if is_fraud_override else None
+
         tat = calculate_tat_deadline(compliance_category)
-        sla_hours = tat["sla_hours"]
-        tat_deadline = tat["tat_deadline_iso"]
-        penalty_info = tat["penalty_description"]
+        sla_deadline = tat["tat_deadline_iso"]
+
+        # Risk score — still calculated for audit trail
+        risk_result = calculate_risk_score(
+            severity_score=severity_score,
+            confidence_score=confidence_score,
+            urgency_score=urgency_score,
+            is_rbi_reportable=is_rbi_reportable,
+            grounding_score=grounding_score,
+            escalation_flag=escalation_flag,
+        )
 
         reasoning = (
-            f"ROUTING DECISION: HUMAN_REVIEW (Supervisor Override)\n"
+            f"ROUTING DECISION: HUMAN (Override)\n"
+            f"Complaint ID: {complaint_id}\n"
             f"Override rules triggered: {len(override_rules_hit)}\n"
             + "\n".join(f"  {i+1}. {r}" for i, r in enumerate(override_rules_hit))
-            + f"\n\nSLA: {tat['sla_label']}\n"
-            f"Deadline: {tat_deadline}\n"
-            f"Penalty: {penalty_info}\n"
-            f"Note: Tier logic check was skipped due to override."
+            + f"\n\nTier hint: {'4 (Fraud — Head Office minimum)' if tier_hint == 4 else 'None (Agent 10.5 will decide tier)'}\n"
+            f"Confidence check: SKIPPED (override takes precedence)\n"
+            f"SLA deadline: {sla_deadline}\n"
+            f"Risk score: {risk_result['risk_score']} (audit only — not used for routing)\n"
+            f"Penalty: {tat.get('penalty_description', 'N/A')}"
         )
 
         return {
-            "route": "human_review",
-            "tier": "human_review",
-            "tier_number": 3,
-            "routing_reason": "supervisor_override",
-            "risk_score": 1.0,
-            "risk_breakdown": {},
-            "sla_hours": sla_hours,
-            "rbi_tat_deadline": tat_deadline,
-            "penalty_per_day": tat.get("penalty_per_day", 0),
-            "override_triggered": True,
-            "override_rules": override_rules_hit,
-            "confidence_check_skipped": True,
-            "confidence_passed": False,
-            "risk_passed": False,
-            "routing_factors": routing_factors,
-            "safety_blocks": ["Override triggered"],
-            "reasoning": reasoning,
+            "route":               "HUMAN",
+            "confidence":          confidence_score,
+            "sla_deadline":        sla_deadline,
+            "override_triggered":  True,
+            "override_rules":      override_rules_hit,
+            "tier_hint":           tier_hint,
+            "risk_score":          risk_result["risk_score"],
+            "risk_breakdown":      risk_result["breakdown"],
+            "routing_factors":     routing_factors,
+            "confidence_gate_applied": False,
+            "reasoning":           reasoning,
         }
 
-    reasoning_steps.append("✓ No override rules triggered. Proceeding to tier decision.")
+    reasoning_steps.append("No override rules triggered. Proceeding to confidence gate.")
 
-    # ── Step 2: Tiered System ───────────────────────────────────────────
-    tier_result = determine_response_tier(
-        confidence_score=confidence_score,
-        severity=severity,
-        sentiment=sentiment,
-        is_rbi_reportable=is_rbi_reportable,
-        compliance_category=compliance_category,
-        grounding_score=grounding_score,
-        grounding_assessment=grounding_assessment,
-    )
+    # ── Step 2: Confidence Gate ──────────────────────────────────────────────
+    # Single threshold: 0.95
+    # Above → AUTO_RESPOND (pipeline ends here, no Agent 10.5)
+    # Below → ESCALATE   (Agent 10.5 will analyze tier + resolution path)
 
-    tier = tier_result["tier"]
-    tier_number = tier_result["tier_number"]
-    final_sla = tier_result["sla_hours"]
+    # TAT deadline — always calculated for RBI compliance tracking
+    tat_category = compliance_category if is_rbi_reportable else "NOT_APPLICABLE"
+    tat          = calculate_tat_deadline(tat_category)
+    sla_deadline = tat["tat_deadline_iso"] if is_rbi_reportable else None
 
-    if tier in ("full_auto", "shadow"):
-        route = "auto_respond"
-    else:
-        route = "human_review"
-
-    # ── Step 3: Risk Score calculation ──────────────────────────────────
+    # Risk score — calculated for audit + Agent 10.5 pass-through
     risk_result = calculate_risk_score(
         severity_score=severity_score,
         confidence_score=confidence_score,
@@ -182,51 +220,69 @@ def make_routing_decision(
         grounding_score=grounding_score,
         escalation_flag=escalation_flag,
     )
-    risk_score = risk_result["risk_score"]
+    risk_score     = risk_result["risk_score"]
     risk_breakdown = risk_result["breakdown"]
 
-    # Regulatory resolution window (RBI TAT) — stored on complaint; separate from tier internal targets
-    tat_category = (
-        compliance_category
-        if (is_rbi_reportable or route == "human_review")
-        else "NOT_APPLICABLE"
-    )
-    tat = calculate_tat_deadline(tat_category)
-    tat_deadline = tat["tat_deadline_iso"] if is_rbi_reportable else None
-    regulatory_sla_hours = tat["sla_hours"]
+    if confidence_score >= AUTO_RESPOND_CONFIDENCE_GATE:
+        # ── AUTO RESPOND ─────────────────────────────────────────────────────
+        reasoning_steps.append(
+            f"Confidence {confidence_score:.1%} >= {AUTO_RESPOND_CONFIDENCE_GATE:.0%} gate. AUTO RESPOND."
+        )
 
-    category_threshold = CATEGORY_CONFIDENCE_THRESHOLDS.get(category, 0.80)
-    confidence_passed = confidence_score >= category_threshold
-    risk_passed = risk_score < 0.60
+        reasoning = (
+            f"ROUTING DECISION: AUTO\n"
+            f"Complaint ID: {complaint_id}\n"
+            f"Confidence: {confidence_score:.1%} — passed {AUTO_RESPOND_CONFIDENCE_GATE:.0%} gate\n"
+            f"Category: {category}\n"
+            f"Agent 10.5: NOT called\n"
+            f"Risk score: {risk_score} (audit only)\n"
+            + "\n".join(f"  {i+1}. {step}" for i, step in enumerate(reasoning_steps))
+        )
 
-    reasoning = (
-        f"ROUTING DECISION: {route.upper()} — TIER {tier_number} ({tier.upper()})\n"
-        f"Tier reason: {tier_result['reason']}\n"
-        + (f"Safety blocks: {'; '.join(tier_result['safety_blocks'])}\n"
-           if tier_result.get('safety_blocks') else "")
-        + f"Confidence: {confidence_score:.0%}\n"
-        + "\n".join(f"  {i+1}. {step}" for i, step in enumerate(reasoning_steps))
-        + f"\nRisk score: {risk_score:.3f}"
-        + f"\nRegulatory SLA: {tat['sla_label']} ({regulatory_sla_hours}h). "
-        f"Tier handling target: {final_sla}h."
-    )
+        return {
+            "route":               "AUTO",
+            "confidence":          confidence_score,
+            "sla_deadline":        sla_deadline,
+            "override_triggered":  False,
+            "override_rules":      [],
+            "tier_hint":           None,
+            "risk_score":          risk_score,
+            "risk_breakdown":      risk_breakdown,
+            "routing_factors":     routing_factors,
+            "confidence_gate_applied": True,
+            "reasoning":           reasoning,
+        }
 
-    return {
-        "route": route,
-        "tier": tier,
-        "tier_number": tier_number,
-        "routing_reason": tier_result["reason"],
-        "risk_score": risk_score,
-        "risk_breakdown": risk_breakdown,
-        "sla_hours": regulatory_sla_hours,
-        "rbi_tat_deadline": tat_deadline,
-        "penalty_per_day": tat.get("penalty_per_day", 0),
-        "override_triggered": False,
-        "override_rules": [],
-        "confidence_check_skipped": False,
-        "confidence_passed": confidence_passed,
-        "risk_passed": risk_passed,
-        "routing_factors": routing_factors,
-        "safety_blocks": tier_result.get("safety_blocks", []),
-        "reasoning": reasoning,
-    }
+    else:
+        # ── ESCALATE → Agent 10.5 ────────────────────────────────────────────
+        reasoning_steps.append(
+            f"Confidence {confidence_score:.1%} < {AUTO_RESPOND_CONFIDENCE_GATE:.0%} gate. "
+            f"Handing off to Agent 10.5 (Escalation Analyzer)."
+        )
+
+        reasoning = (
+            f"ROUTING DECISION: ESCALATE → Agent 10.5\n"
+            f"Complaint ID: {complaint_id}\n"
+            f"Confidence: {confidence_score:.1%} — below {AUTO_RESPOND_CONFIDENCE_GATE:.0%} gate\n"
+            f"Category: {category}\n"
+            f"Risk score: {risk_score} (passed to Agent 10.5)\n"
+            f"RBI reportable: {is_rbi_reportable}\n"
+            f"Severity: {severity} | Sentiment: {sentiment}\n"
+            + "\n".join(f"  {i+1}. {step}" for i, step in enumerate(reasoning_steps))
+            + f"\nAgent 10.5 will determine: tier (Branch/Zone/Region/HO), "
+            f"resolution path, and human assignment."
+        )
+
+        return {
+            "route":               "ESCALATE",
+            "confidence":          confidence_score,
+            "sla_deadline":        sla_deadline,
+            "override_triggered":  False,
+            "override_rules":      [],
+            "tier_hint":           None,      # Agent 10.5 decides tier
+            "risk_score":          risk_score,
+            "risk_breakdown":      risk_breakdown,
+            "routing_factors":     routing_factors,
+            "confidence_gate_applied": True,
+            "reasoning":           reasoning,
+        }

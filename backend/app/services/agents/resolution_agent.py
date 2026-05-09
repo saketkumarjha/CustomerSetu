@@ -72,11 +72,23 @@ def _build_system_prompt(
     is_rbi_reportable: bool,
     language: str,
     context_documents: list,
+    tier_level: str = None,
+    tier_contact_info: str = None,
+    previous_tier_attempts: str = None,
 ) -> str:
     """
-    Build the dynamic system prompt from all upstream agent outputs.
-    The prompt changes based on what previous agents detected.
+    Build the dynamic system prompt from all upstream agent outputs, now tier-aware.
     """
+    # Tier context
+    tier_section = ""
+    if tier_level:
+        tier_section += f"You are responding at {tier_level} authority level.\n"
+    if tier_contact_info:
+        tier_section += f"Available resources: {tier_contact_info}\n"
+    if previous_tier_attempts:
+        tier_section += f"Previous tier attempts: {previous_tier_attempts}\n"
+    if tier_section:
+        tier_section += "\n"
 
     # Format RAG context as numbered examples
     if context_documents:
@@ -89,12 +101,12 @@ def _build_system_prompt(
             for i, doc in enumerate(context_documents[:3])
         ])
         context_section = (
-            f"SIMILAR PAST RESOLUTIONS (use these as style/tone reference):\n"
+            f"TIER-SPECIFIC SIMILAR PAST RESOLUTIONS (use these as style/tone reference):\n"
             f"{examples_text}\n\n"
         )
     else:
         context_section = (
-            "No similar past resolutions available. "
+            "No similar past resolutions available for this tier. "
             "Generate a professional response from your training knowledge.\n\n"
         )
 
@@ -121,6 +133,7 @@ def _build_system_prompt(
     return f"""You are a senior customer service specialist at an Indian bank.
 You are drafting a response to a customer complaint.
 
+{tier_section}
 COMPLAINT METADATA:
 - Category: {category}
 - Customer Sentiment: {sentiment}
@@ -130,7 +143,6 @@ COMPLAINT METADATA:
 - RBI Reportable: {'YES' if is_rbi_reportable else 'NO'}
 {rbi_note}{escalation_note}
 {context_section}
-
 YOUR TASK:
 Draft a professional, empathetic, RBI-compliant response.
 
@@ -144,7 +156,9 @@ STRICT OUTPUT FORMAT — respond ONLY with this JSON structure:
     "<internal action step 3>"
   ],
   "confidence": <float 0.0-1.0 — how confident you are this resolves the issue>,
-  "confidence_reasoning": "<why you assigned this confidence level>"
+  "confidence_reasoning": "<why you assigned this confidence level>",
+  "resolution_type": "INFORMATIONAL|ACTIONABLE|PROCEDURAL",
+  "authority_sufficient": <true|false — can current tier resolve this?>
 }}
 
 RULES:
@@ -152,10 +166,12 @@ RULES:
 - root_cause: specific, not generic ("processing error" not "technical issue")
 - action_steps: concrete, verifiable by an agent (2-4 steps)
 - confidence: lower if complaint is vague or RBI-reportable
+- resolution_type: INFORMATIONAL (just info), ACTIONABLE (customer/agent must act), PROCEDURAL (bank process to follow)
+- authority_sufficient: true if this tier can resolve, false if escalation needed
 - DO NOT include markdown, fences, or text outside the JSON object"""
 
 
-def generate_resolution(
+def generate_tier_aware_resolution(
     complaint_text: str,
     masked_text: str,
     category: str,
@@ -166,14 +182,12 @@ def generate_resolution(
     is_rbi_reportable: bool,
     language: str,
     context_documents: list,
+    tier_level: str = None,
+    tier_contact_info: str = None,
+    previous_tier_attempts: str = None,
 ) -> dict:
     """
-    Generate a resolution draft using GPT-4o with dynamic few-shot prompting.
-
-    Uses masked_text for the system prompt context (safe).
-    Uses original complaint_text for the user turn (full context for better response).
-
-    Returns dict with resolution fields and XAI metadata.
+    Generate a tier-aware resolution draft using GPT-4o with dynamic few-shot prompting.
     """
     client = _get_client()
 
@@ -186,6 +200,9 @@ def generate_resolution(
         is_rbi_reportable=is_rbi_reportable,
         language=language,
         context_documents=context_documents,
+        tier_level=tier_level,
+        tier_contact_info=tier_contact_info,
+        previous_tier_attempts=previous_tier_attempts,
     )
 
     user_message = (
@@ -202,7 +219,7 @@ def generate_resolution(
         ],
         response_format={"type": "json_object"},
         temperature=0.3,
-        max_tokens=800,
+        max_tokens=900,
     )
 
     result = json.loads(response.choices[0].message.content)
@@ -212,11 +229,11 @@ def generate_resolution(
     action_steps = result.get("action_steps", [])
     confidence = float(result.get("confidence", 0.5))
     confidence_reasoning = result.get("confidence_reasoning", "")
+    resolution_type = result.get("resolution_type", "INFORMATIONAL")
+    authority_sufficient = bool(result.get("authority_sufficient", False))
 
     # Get per-category threshold
     category_threshold = CATEGORY_CONFIDENCE_THRESHOLDS.get(category, 0.80)
-
-    # Check if this category is in never-auto-respond list
     never_auto = compliance_category in NEVER_AUTO_RESPOND
 
     return {
@@ -229,4 +246,6 @@ def generate_resolution(
         "meets_threshold": confidence >= category_threshold and not never_auto,
         "never_auto_respond": never_auto,
         "context_used": len(context_documents),
+        "resolution_type": resolution_type,
+        "authority_sufficient": authority_sufficient,
     }

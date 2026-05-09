@@ -38,6 +38,8 @@ SEED_DATA = [
             "5 working days. We sincerely regret this inconvenience."
         ),
         "quality_score": 1.0,
+        "tier_level": "branch",
+        "tier_scope": "branch_001",
     },
     {
         "category": "Credit Card",
@@ -51,6 +53,8 @@ SEED_DATA = [
             "not be repeated."
         ),
         "quality_score": 1.0,
+        "tier_level": "zone",
+        "tier_scope": "zone_002",
     },
     {
         "category": "Credit Card",
@@ -63,6 +67,8 @@ SEED_DATA = [
             "a revised copy for your records."
         ),
         "quality_score": 1.0,
+        "tier_level": "national",
+        "tier_scope": None,
     },
     # ── UPI / Payments ────────────────────────────────────────────────────
     {
@@ -215,6 +221,8 @@ def seed():
                 "source": "seed",
                 "quality_score": item["quality_score"],
                 "embedding": embedding,
+                "tier_level": item["tier_level"],
+                "tier_scope": item["tier_scope"],
             }).execute()
 
             success += 1

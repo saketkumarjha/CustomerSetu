@@ -124,6 +124,17 @@ def process_customer_feedback(
         {"status": "closed"}
     ).eq("complaint_id", complaint_id).execute()
 
+    # Update KB enrichment queue quality signals with CSAT (best-effort)
+    try:
+        from app.services.resolution_event_handler import resolution_event_handler
+        resolution_event_handler.on_customer_feedback(
+            complaint_id = complaint_id,
+            rating       = float(rating),
+            comment      = feedback_text or "",
+        )
+    except Exception:
+        pass
+
     # Step 8: Router calibration
     calibration_triggered = _check_router_calibration(
         category=category,

@@ -1,0 +1,29 @@
+{bank_name} — Customer Care
+Date: {date_today}
+
+Dear {customer_name},
+
+Thank you for contacting {bank_name}. We have received and reviewed {issue_summary}.
+
+RESOLUTION
+----------
+{draft_response}
+
+CONTACT — {tier_name}
+----------
+  Phone   : {contact_phone}
+  Email   : {contact_email}
+  Hours   : {contact_hours}
+  Address : {contact_address}
+
+ESCALATION INFORMATION
+----------------------
+{escalation_msg}
+
+Complaint Reference : {complaint_id}
+Track your complaint: {bank_site}/complaint-tracking
+
+Regards,
+Customer Care Team
+{bank_name}
+Toll-Free: {toll_free}

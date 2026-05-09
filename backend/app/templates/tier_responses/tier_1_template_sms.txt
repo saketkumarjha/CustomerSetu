@@ -1,0 +1,1 @@
+UBI: Re complaint {complaint_id}: {draft_response} For queries call {contact_phone}. {escalation_msg}

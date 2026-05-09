@@ -37,3 +37,11 @@ class ComplaintSubmitResponse(BaseModel):
     # Status
     status: str = "text_extracted"             # will change as pipeline grows
     message: str = "Image processed and text merged successfully"
+
+    # Tier metadata
+    tier_level: Optional[str] = None          # e.g., branch, zone, national
+    tier_scope: Optional[str] = None          # e.g., branch_id, zone_id
+
+    # Tier-aware resolution outputs
+    resolution_type: Optional[str] = None
+    authority_sufficient: Optional[bool] = None

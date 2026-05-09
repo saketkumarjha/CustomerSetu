@@ -1,0 +1,1 @@
+UBI Zonal: Re complaint {complaint_id}: {draft_response} Queries: {contact_phone}. {escalation_msg}
