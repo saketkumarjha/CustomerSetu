@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\" -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\" -Recurse -Force | Where-Object { $_.PSIsContainer } | Select-Object FullName | Sort-Object FullName)",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :8000)"
+    ]
+  }
+}

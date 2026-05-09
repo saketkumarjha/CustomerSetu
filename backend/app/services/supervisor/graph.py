@@ -33,7 +33,7 @@ from app.services.agents.duplicate_agent import check_for_duplicate, store_embed
 from app.services.agents.fanout_agents import run_parallel_fanout
 from app.core.config import get_settings
 from app.services.agents.rag_agent import retrieve_context
-from app.services.agents.resolution_agent import generate_resolution
+from app.services.agents.resolution_agent import generate_tier_aware_resolution
 from app.services.agents.grounding_agent import run_grounding_check
 from app.services.agents.routing_agent import make_routing_decision
 # ── Helper: emit SSE + write audit trail ─────────────────────────────────────
@@ -430,7 +430,7 @@ async def rag_node(state: PipelineState) -> dict:
 # ── NODE 5: Resolution Agent ──────────────────────────────────────────────────
 async def resolution_node(state: PipelineState) -> dict:
     """
-    PHASE 7 — Real GPT-4o resolution generation with dynamic few-shot prompting.
+    PHASE 8 — Tier-Aware Resolution Generator with dynamic few-shot prompting.
     """
     agent_name = "Resolution Generator"
     agent_order = 8
@@ -440,7 +440,7 @@ async def resolution_node(state: PipelineState) -> dict:
 
     try:
         result = await asyncio.to_thread(
-            generate_resolution,
+            generate_tier_aware_resolution,
             state.get("complaint_text", ""),
             state.get("masked_text", ""),
             state.get("category", "General Banking"),
@@ -451,6 +451,9 @@ async def resolution_node(state: PipelineState) -> dict:
             state.get("is_rbi_reportable", False),
             state.get("language", "en"),
             state.get("context_documents", []),
+            state.get("tier_level", None),
+            state.get("tier_contact_info", None),
+            state.get("previous_tier_attempts", None),
         )
 
         draft = result["draft_response"]
@@ -461,6 +464,8 @@ async def resolution_node(state: PipelineState) -> dict:
         never_auto = result["never_auto_respond"]
         category_threshold = result["category_threshold"]
         context_used = result["context_used"]
+        resolution_type = result["resolution_type"]
+        authority_sufficient = result["authority_sufficient"]
 
         reasoning = (
             f"Resolution generated using GPT-4o.\n"
@@ -471,7 +476,9 @@ async def resolution_node(state: PipelineState) -> dict:
             + (f"⚠️ NEVER AUTO-RESPOND category — forced to human review\n"
                if never_auto else "")
             + f"Confidence reasoning: {result.get('confidence_reasoning', '')}\n"
-            f"Root cause: {root_cause}"
+            f"Root cause: {root_cause}\n"
+            f"Resolution type: {resolution_type}\n"
+            f"Authority sufficient: {authority_sufficient}"
         )
 
         output = AgentOutput(
@@ -505,6 +512,7 @@ async def resolution_node(state: PipelineState) -> dict:
         action_steps = ["Review complaint manually", "Contact customer within 24 hours"]
         confidence = 0.3
         meets_threshold = False
+        authority_sufficient = False
 
         output = AgentOutput(
             agent_name=agent_name,
@@ -528,6 +536,7 @@ async def resolution_node(state: PipelineState) -> dict:
         "root_cause": root_cause,
         "action_steps": action_steps,
         "confidence_score": confidence,
+        "authority_sufficient": authority_sufficient,
         "current_agent": agent_name,
         "explanation_trace": [output.model_dump()],
         "errors": [str(output.error_message)] if output.error_message else [],
@@ -622,11 +631,15 @@ async def grounding_node(state: PipelineState) -> dict:
         "explanation_trace": [output.model_dump()],
         "errors": [str(output.error_message)] if output.error_message else [],
     }
-# ── NODE 7: Routing Node (Supervisor Final Decision) ─────────────────────────
+# ── NODE 7: Routing Node (Agent 10) + conditional Agent 10.5 ─────────────────
 async def routing_node(state: PipelineState) -> dict:
     """
-    PHASE 9 — Real risk-aware routing with RBI override rules.
-    Deterministic decision engine — no LLM calls.
+    Agent 10 — Risk-Aware Routing (deterministic, no LLM).
+
+    Routes:
+      AUTO     → execute_auto_response() (confidence >= 95%)
+      ESCALATE → Agent 10.5 analyze_escalation(), then optional shadow mode
+      HUMAN    → override rules fired, assign tier_hint (default 4)
     """
     agent_name = "Risk-Aware Routing"
     agent_order = 10
@@ -635,11 +648,9 @@ async def routing_node(state: PipelineState) -> dict:
     start = await _agent_start(complaint_id, agent_name, agent_order)
 
     try:
-        # Extract grounding assessment from warnings metadata
         grounding_warnings = state.get("grounding_warnings", [])
         grounding_score = state.get("grounding_score", 1.0)
 
-        # Determine overall grounding assessment from warnings count
         warning_count = len(grounding_warnings)
         if warning_count == 0:
             grounding_assessment = "SAFE_TO_SEND"
@@ -665,12 +676,10 @@ async def routing_node(state: PipelineState) -> dict:
 
         route = result["route"]
         risk_score = result["risk_score"]
-        sla_hours = result["sla_hours"]
-        tat_deadline = result["rbi_tat_deadline"]
+        sla_deadline = result["sla_deadline"]
         reasoning = result["reasoning"]
         override_triggered = result["override_triggered"]
 
-        # Build evidence list — what factors drove the decision
         evidence = []
         if override_triggered:
             evidence = [f"OVERRIDE: {r[:80]}" for r in result["override_rules"][:3]]
@@ -682,85 +691,275 @@ async def routing_node(state: PipelineState) -> dict:
             agent_order=agent_order,
             status=AgentStatus.COMPLETE,
             decision=(
-                f"{route.upper()} | "
-                f"Risk: {risk_score:.3f} | "
-                f"SLA: {sla_hours}h"
-                + (" | 🚨 OVERRIDE" if override_triggered else "")
-                + (f" | 💰 Penalty: ₹{result['penalty_per_day']}/day"
-                   if result.get("penalty_per_day") else "")
+                f"{route} | Risk: {risk_score:.3f}"
+                + (" | OVERRIDE" if override_triggered else "")
+                + (f" | Tier hint: {result['tier_hint']}" if result.get("tier_hint") else "")
             ),
             confidence=1.0 - risk_score,
             reasoning=reasoning,
             evidence=evidence,
             metadata={
                 "route": route,
-                "routing_reason": result["routing_reason"],
                 "risk_score": risk_score,
                 "risk_breakdown": result.get("risk_breakdown", {}),
-                "sla_hours": sla_hours,
-                "rbi_tat_deadline": tat_deadline,
-                "penalty_per_day": result.get("penalty_per_day", 0),
+                "sla_deadline": sla_deadline,
                 "override_triggered": override_triggered,
                 "override_rules": result.get("override_rules", []),
-                "confidence_check_skipped": result.get("confidence_check_skipped", False),
-                "confidence_passed": result.get("confidence_passed"),
-                "risk_passed": result.get("risk_passed"),
+                "tier_hint": result.get("tier_hint"),
+                "confidence_gate_applied": result.get("confidence_gate_applied", False),
             },
         )
 
     except Exception as e:
-        route = "human_review"
+        route = "HUMAN"
         risk_score = 1.0
-        sla_hours = 720  # 30 calendar days — align with DEFAULT_TAT when routing errors
-        tat_deadline = None
+        sla_deadline = None
         result = {
-            "tier": "human_review",
-            "tier_number": 3,
-            "routing_reason": "error",
+            "route": "HUMAN",
             "override_triggered": False,
+            "risk_score": 1.0,
+            "risk_breakdown": {},
+            "tier_hint": 4,
+            "override_rules": [],
+            "routing_factors": [],
+            "confidence_gate_applied": False,
         }
+        override_triggered = False
 
         output = AgentOutput(
             agent_name=agent_name,
             agent_order=agent_order,
             status=AgentStatus.FAILED,
-            decision="HUMAN_REVIEW (routing failed — safe default)",
+            decision="HUMAN (routing failed — safe default)",
             confidence=0.0,
             reasoning=f"Routing engine error: {str(e)}. Defaulting to human review.",
-            metadata={"route": "human_review", "error": str(e)},
+            metadata={"route": "HUMAN", "error": str(e)},
             error_message=str(e),
         )
 
     await _agent_complete(complaint_id, output, start)
 
-    # ── Auto-response ────────────────────────────────────────────────────
+    # ── Dispatch based on route ──────────────────────────────────────────
     auto_response_result = {}
-    tier = result.get("tier", "human_review")
+    assigned_tier = result.get("tier_hint")
+    escalation_decision = None
+    response_tier = "human_review"
+    escalation_trace = []
+    formatted_response = None
+    notification_channel = None
+    customer_notified_at = None
+    escalation_info_out = None
 
-    if tier in ("full_auto", "shadow") and not result.get("override_triggered"):
+    if route == "AUTO" and not override_triggered:
         from app.services.auto_responder import execute_auto_response
+        from app.tasks.kb_enrichment import schedule_kb_enrichment
+
         auto_response_result = execute_auto_response(
-            complaint_id=complaint_id,
-            customer_id=state.get("customer_id", ""),
-            channel=state.get("channel", "web"),
-            draft_response=state.get("draft_response", ""),
-            tier=tier,
-            confidence_score=state.get("confidence_score", 0.5),
+            complaint_id   = complaint_id,
+            customer_id    = state.get("customer_id", ""),
+            channel        = state.get("channel", "web"),
+            draft_response = state.get("draft_response", ""),
+            tier           = "full_auto",
+            confidence_score = state.get("confidence_score", 0.5),
+            tier_level     = state.get("current_tier", 1),
+            sla_deadline   = state.get("rbi_tat_deadline"),
+        )
+        response_tier        = "full_auto"
+        formatted_response   = auto_response_result.get("formatted_response")
+        notification_channel = auto_response_result.get("notification_channel")
+        customer_notified_at = auto_response_result.get("customer_notified_at")
+        escalation_info_out  = auto_response_result.get("escalation_info")
+
+        # Emit SSE "response_sent" so the frontend can show a real-time preview
+        await event_bus.publish(complaint_id, {
+            "event":               "response_sent",
+            "tier":                state.get("current_tier", 1),
+            "confidence":          state.get("confidence_score", 0.5),
+            "notification_channel": notification_channel,
+            "sent_at":             customer_notified_at,
+            "preview":             auto_response_result.get("formatted_response", "")[:150],
+        })
+
+        # Schedule background KB enrichment after 24 h
+        import asyncio as _asyncio
+        _asyncio.create_task(
+            schedule_kb_enrichment(
+                complaint_id     = complaint_id,
+                draft_response   = state.get("draft_response", ""),
+                confidence_score = state.get("confidence_score", 0.5),
+                tier_level       = state.get("current_tier", 1),
+            )
         )
 
+    elif route == "ESCALATE":
+        from app.services.agents.esclation_analyzer import analyze_escalation, execute_shadow_mode
+
+        esc_start = await _agent_start(complaint_id, "Escalation Analyzer", 11)
+
+        escalation_result = analyze_escalation(
+            complaint_id=complaint_id,
+            complaint_text=state.get("masked_text", ""),
+            category=state.get("category", "General Banking"),
+            compliance_category=state.get("compliance_category", "NOT_APPLICABLE"),
+            is_rbi_reportable=state.get("is_rbi_reportable", False),
+            sentiment=state.get("sentiment", "Neutral"),
+            severity=state.get("severity", 3),
+            confidence_score=state.get("confidence_score", 0.5),
+            grounding_score=state.get("grounding_score", 1.0),
+            authority_sufficient=state.get("authority_sufficient", True),
+            draft_response=state.get("draft_response", ""),
+            current_tier=state.get("current_tier", 1),
+            risk_score=result["risk_score"],
+            risk_breakdown=result["risk_breakdown"],
+        )
+
+        assigned_tier = escalation_result["target_tier"]
+        escalation_decision = escalation_result["decision"]
+        response_tier = escalation_result.get("target_tier_label", "human_review")
+
+        esc_output = AgentOutput(
+            agent_name="Escalation Analyzer",
+            agent_order=11,
+            status=AgentStatus.COMPLETE,
+            decision=(
+                f"{escalation_result['decision']} → Tier {assigned_tier} "
+                f"({escalation_result['target_tier_label']})"
+            ),
+            confidence=escalation_result["confidence_score"],
+            reasoning=escalation_result["reasoning"],
+            evidence=escalation_result.get("signals_detected", [])[:3],
+            metadata={
+                "decision": escalation_result["decision"],
+                "target_tier": assigned_tier,
+                "target_tier_label": escalation_result["target_tier_label"],
+                "rule_triggered": escalation_result["rule_triggered"],
+                "sla_hours": escalation_result["sla_hours"],
+                "shadow_eligible": escalation_result["shadow_eligible"],
+                "risk_score": escalation_result["risk_score"],
+            },
+        )
+        await _agent_complete(complaint_id, esc_output, esc_start)
+        escalation_trace = [esc_output.model_dump()]
+
+        # ── HUMAN_AT_CURRENT_TIER: assign to queue at current tier ──────────
+        if escalation_result["decision"] == "HUMAN_AT_CURRENT_TIER":
+            from app.services.queue_service import assign_to_queue
+
+            queue_result = assign_to_queue(
+                complaint_id  = complaint_id,
+                tier_level    = state.get("current_tier", 1),
+                urgency_score = state.get("urgency_score", 5.0),
+                severity      = state.get("severity", 3),
+                severity_score= state.get("severity_score", 5.0),
+                category      = state.get("category", "General Banking"),
+                sla_deadline  = escalation_result.get("sla_deadline"),
+            )
+
+            await event_bus.publish(complaint_id, {
+                "event":          "assigned_to_agent",
+                "complaint_id":   complaint_id,
+                "assigned_to":    queue_result.get("assigned_to"),
+                "tier":           state.get("current_tier", 1),
+                "priority":       queue_result.get("priority_score"),
+                "queue_position": queue_result.get("queue_position"),
+            })
+
+            await event_bus.publish(complaint_id, {
+                "event":                "queue_position_updated",
+                "complaint_id":         complaint_id,
+                "new_position":         queue_result.get("queue_position"),
+                "estimated_wait_time":  f"{queue_result.get('estimated_review_time', 12)} min",
+            })
+
+            # Store why escalation was not triggered (for agent context)
+            from app.db.supabase_client import get_supabase as _get_supabase
+            _get_supabase().table("complaints").update({
+                "escalation_not_triggered_reason": escalation_result.get("reasoning", ""),
+            }).eq("complaint_id", complaint_id).execute()
+
+            response_tier = escalation_result.get("target_tier_label", "human_review")
+
+        # ── ESCALATE → Route 3: Auto-Escalation orchestrator ─────────────
+        elif escalation_result["decision"] == "ESCALATE":
+            from app.services.escalation_orchestrator import execute_escalation
+
+            esc_orchestrator_result = await execute_escalation(
+                complaint_id=complaint_id,
+                from_tier=state.get("current_tier", 1),
+                to_tier=assigned_tier,
+                escalation_reason=escalation_result.get("rule_triggered", "CONFIDENCE_LOW"),
+                original_state=dict(state),
+                signals_detected=escalation_result.get("signals_detected", []),
+                escalation_reasoning=escalation_result.get("reasoning", ""),
+            )
+
+            orchestrator_route = esc_orchestrator_result.get("final_route", "human_review")
+            final_tier = esc_orchestrator_result.get("final_tier", assigned_tier)
+            assigned_tier = final_tier
+            response_tier = orchestrator_route
+
+            if orchestrator_route == "auto_respond":
+                # Orchestrator already sent the response; surface the outputs
+                formatted_response = esc_orchestrator_result.get("formatted_response")
+                notification_channel = esc_orchestrator_result.get("notification_channel")
+                customer_notified_at = esc_orchestrator_result.get("customer_notified_at")
+            else:
+                # human_review at the final escalated tier
+                from app.services.queue_service import assign_to_queue
+                queue_result = assign_to_queue(
+                    complaint_id=complaint_id,
+                    tier_level=final_tier,
+                    urgency_score=state.get("urgency_score", 5.0),
+                    severity=state.get("severity", 3),
+                    severity_score=state.get("severity_score", 5.0),
+                    category=state.get("category", "General Banking"),
+                    sla_deadline=escalation_result.get("sla_deadline"),
+                )
+                await event_bus.publish(complaint_id, {
+                    "event": "assigned_to_agent",
+                    "complaint_id": complaint_id,
+                    "assigned_to": queue_result.get("assigned_to"),
+                    "tier": final_tier,
+                    "queue_position": queue_result.get("queue_position"),
+                    "escalation_path": esc_orchestrator_result.get("escalation_path", []),
+                    "stop_reason": esc_orchestrator_result.get("stop_reason"),
+                })
+
+            # Carry escalation orchestrator result into state for persistence
+            escalation_info_out = {
+                "escalation_path": esc_orchestrator_result.get("escalation_path", []),
+                "total_escalations": esc_orchestrator_result.get("total_escalations", 0),
+                "stop_reason": esc_orchestrator_result.get("stop_reason"),
+                "final_tier": final_tier,
+            }
+
+    elif route == "HUMAN":
+        # Override triggered — direct to tier_hint (fraud → 4, others → 4 default)
+        assigned_tier = result.get("tier_hint") or 4
+        response_tier = "human_review"
+
     return {
-        "route": route,
-        "risk_score": risk_score,
-        "sla_hours": sla_hours,
-        "rbi_tat_deadline": tat_deadline,
-        "routing_reason": result.get("routing_reason", "error"),
-        "pipeline_status": "complete",
-        "current_agent": agent_name,
-        "explanation_trace": [output.model_dump()],
-        "errors": [str(output.error_message)] if output.error_message else [],
-        "response_tier": result.get("tier", "human_review"),
-        "tier_number": result.get("tier_number", 3),
-        "auto_response_result": auto_response_result,
+        "route":                      route,
+        "risk_score":                 risk_score,
+        "sla_hours":                  None,
+        "rbi_tat_deadline":           sla_deadline,
+        "routing_reason":             route,
+        "pipeline_status":            "complete",
+        "current_agent":              agent_name,
+        "explanation_trace":          [output.model_dump()] + escalation_trace,
+        "errors":                     [str(output.error_message)] if output.error_message else [],
+        "response_tier":              response_tier,
+        "tier_number":                assigned_tier or 3,
+        "auto_response_result":       auto_response_result,
+        "assigned_tier":              assigned_tier,
+        "escalation_decision":        escalation_decision,
+        # Auto-response tracking fields (populated when route == "AUTO" or orchestrator auto-responds)
+        "formatted_response":         formatted_response,
+        "notification_channel":       notification_channel,
+        "customer_notified_at":       customer_notified_at,
+        "escalation_info":            escalation_info_out,
+        # Route 3 escalation tracking
+        "escalation_orchestrator_result": locals().get("esc_orchestrator_result"),
     }
 # ── GRAPH ASSEMBLY ────────────────────────────────────────────────────────────
 

@@ -7,6 +7,8 @@ from app.api.v1.routes import (
     feedback,
     dashboard,
     sla,
+    agent,
+    kb_admin,
 )
 
 api_v1_router = APIRouter()
@@ -45,4 +47,14 @@ api_v1_router.include_router(
     sla.router,
     prefix="/sla",
     tags=["SLA Predictor"],
+)
+api_v1_router.include_router(
+    agent.router,
+    prefix="/agent",
+    tags=["Agent Dashboard"],
+)
+api_v1_router.include_router(
+    kb_admin.router,
+    prefix="/admin/kb",
+    tags=["KB Admin"],
 )

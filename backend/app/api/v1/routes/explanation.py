@@ -33,7 +33,7 @@ async def get_explanation(complaint_id: str):
     # Verify complaint exists
     complaint_result = (
         supabase.table("complaints")
-        .select("complaint_id, pipeline_status, route, category, severity")
+        .select("complaint_id, pipeline_status, route, category, severity, tier_level, tier_scope")
         .eq("complaint_id", complaint_id)
         .execute()
     )
@@ -63,5 +63,9 @@ async def get_explanation(complaint_id: str):
         "category": complaint.get("category"),
         "severity": complaint.get("severity"),
         "total_agents": len(decisions),
+        "tier_metadata": {
+            "tier_level": complaint.get("tier_level"),
+            "tier_scope": complaint.get("tier_scope"),
+        },
         "explanation_trace": decisions,
     }

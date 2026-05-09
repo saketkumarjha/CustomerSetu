@@ -1,0 +1,47 @@
+[
+  {
+    "tier_level": 0,
+    "tier_scope": null,
+    "category": "UPI",
+    "issue_type": "Transaction Failed - Money Debited",
+    "resolution_text": "UPI Transaction Failed - Money Debited Issue:\n\nStep 1: Wait for Auto-Reversal...",
+    "quality_score": 0.95,
+    "verified": true
+  },
+  {
+    "tier_level": 1,
+    "tier_scope": "BRANCH:BR_MH_001",
+    "category": "Branch Service",
+    "issue_type": "General Branch Information",
+    "resolution_text": "Union Bank of India - Fort Branch, Mumbai\n\nBranch Details...",
+    "quality_score": 1.0,
+    "verified": true
+  },
+  {
+    "tier_level": 2,
+    "tier_scope": "REGION:RG_WEST",
+    "category": "Loan Services",
+    "issue_type": "Home Loan Application Status",
+    "resolution_text": "Home Loan Application Status - Western Region\n\nTo check the status of your home loan application in the Western region, please follow these steps:\n\n1. Visit the Union Bank of India website or mobile app.\n2. Log in to your account using your credentials.\n3. Navigate to the 'Loans' section and select 'Home Loans'.\n4. Click on 'Application Status' and enter your application reference number.\n5. You will be able to see the current status of your home loan application, including any pending documents or actions required.\n\nIf you have any further questions or need assistance, please contact our customer support at 1800-22-2244.",
+    "quality_score": 0.92,
+    "verified": true
+  },
+  {
+    "tier_level": 3,
+    "tier_scope": "ALL",
+    "category": "Credit Card Services",
+    "issue_type": "Credit Card Limit Increase Request",
+    "resolution_text": "Credit Card Limit Increase Request\n\nTo request a credit card limit increase, please follow these steps:\n\n1. Log in to your Union Bank of India account on our website or mobile app.\n2. Navigate to the 'Credit Cards' section and select your credit card.\n3. Click on 'Request Credit Limit Increase'.\n4. Fill out the required information, including your current income and reason for the increase.\n5. Submit your request.\n\nOur team will review your request and notify you of the decision within 7-10 business days. If approved, the new credit limit will be reflected in your account.",
+    "quality_score": 0.88,
+    "verified": true
+  },
+  {
+    "tier_level": 4,
+    "tier_scope": "NATIONAL",
+    "category": "Account Services",
+    "issue_type": "Account Closure Process",
+    "resolution_text": "Account Closure Process (National Level)\n\nTo close your Union Bank of India account, please follow these steps:\n\n1. Visit your nearest Union Bank of India branch with a valid photo ID and your account passbook.\n2. Fill out the account closure form provided by the branch.\n3. Ensure all pending dues, charges, and cheque leaves are settled.\n4. Submit your debit card, cheque book, and passbook to the branch official.\n5. The closure process will be initiated, and the remaining balance will be paid to you via your preferred mode (cash, demand draft, or transfer to another account).\n\nFor further assistance, contact our national helpline at 1800-22-2244.",
+    "quality_score": 0.93,
+    "verified": true
+  }
+]

@@ -14,6 +14,7 @@ from fastapi import (
     Header, Query, Body
 )
 from typing import Optional, Annotated
+import re
 
 from app.models.complaint import ComplaintSubmitResponse
 from app.services.image_handler import process_image_attachment
@@ -21,7 +22,7 @@ from app.middleware.idempotency import check_idempotency, store_idempotency_key
 from app.middleware.rate_limiter import limiter
 from app.db.supabase_client import get_supabase
 from app.core.config import get_settings
-from app.services.auto_responder import execute_shadow_override
+from app.services.agents.esclation_analyzer import execute_shadow_override
 
 router = APIRouter()
 
@@ -115,6 +116,50 @@ async def list_complaints(
         "complaints": result.data or [],
     }
 
+def detect_fast_track_tier(text: str) -> tuple[int, str]:
+    """
+    Rule-Based Fast-Track Tier Detection (No ML)
+    """
+    if not text:
+        return 0, "Standard Route"
+        
+    text_lower = text.lower()
+    
+    # Tier 5
+    if any(kw in text_lower for kw in ["ombudsman", "rbi complaint", "banking ombudsman"]):
+        return 5, "RBI/Ombudsman Escalation"
+        
+    # Tier 4
+    if any(kw in text_lower for kw in ["ceo", "head office", "chairman"]) or re.search(r"\bmd\b", text_lower):
+        return 4, "Executive Escalation"
+        
+    # Tier 3
+    if any(kw in text_lower for kw in ["regional office", "regional manager"]):
+        return 3, "Regional Escalation"
+        
+    # Tier 2
+    if any(kw in text_lower for kw in ["zonal office", "zone manager"]):
+        return 2, "Zonal Escalation"
+        
+    # Tier 1
+    # 1. Branch code pattern (e.g., "BR_MH_001")
+    if re.search(r"br_[a-z]{2}_\d{3}", text_lower):
+        return 1, "Branch Code Detected"
+        
+    # 2. "branch manager", "branch staff" + negative sentiment
+    negative_words = [
+        "worst", "bad", "terrible", "frustrated", "angry", "pathetic", 
+        "useless", "fraud", "cheat", "scam", "unprofessional", "rude", "poor"
+    ]
+    has_branch_kw = any(kw in text_lower for kw in ["branch manager", "branch staff"])
+    has_negative = any(kw in text_lower for kw in negative_words)
+    
+    if has_branch_kw and has_negative:
+        return 1, "Branch Staff Negative Sentiment"
+        
+    return 0, "Standard Route"
+
+
 @router.post(
     "/submit",
     response_model=ComplaintSubmitResponse,
@@ -201,6 +246,9 @@ async def submit_complaint(
                 detail=f"Image processing failed: {str(e)}"
             )
 
+    # ── Fast-Track Tier Detection (Rule-Based) ────────────────────────────
+    initial_tier, fast_track_reason = detect_fast_track_tier(merged_text)
+
     # ── Create complaint record in Supabase ───────────────────────────────
     supabase = get_supabase()
 
@@ -214,6 +262,10 @@ async def submit_complaint(
         "extraction_method": extraction_method,
         "pipeline_status": "pending",
         "status": "pending",
+        "initial_tier": initial_tier,
+        "current_tier": initial_tier,
+        "max_tier_reached": initial_tier,
+        "fast_track_reason": fast_track_reason if initial_tier > 0 else None
     }
 
     try:
@@ -264,7 +316,7 @@ async def shadow_override(
 
     1 hour ke baad override window close ho jaata hai.
     """
-    from app.services.auto_responder import execute_shadow_override
+    from app.services.agents.esclation_analyzer import execute_shadow_override
 
     try:
         result = execute_shadow_override(
@@ -278,3 +330,72 @@ async def shadow_override(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get(
+    "/{complaint_id}/escalation-status",
+    summary="Get auto-escalation status for a complaint",
+)
+async def get_escalation_status(complaint_id: str):
+    """
+    Returns the current auto-escalation state for a complaint.
+
+    Includes:
+      - is_escalating        : bool — is a Route 3 loop currently running?
+      - current_tier         : int  — where the complaint sits right now
+      - escalation_count     : int  — how many tier hops have occurred
+      - escalation_path      : list — e.g. [1, 2, 3]
+      - max_tier_reached     : int  — highest tier the system has tried
+      - last_escalation_at   : ISO datetime
+      - escalation_loop_detected : bool
+      - escalation_history   : list — full audit trail from complaint_escalation_history
+    """
+    from app.db.supabase_client import get_supabase
+    supabase = get_supabase()
+
+    # Complaint record
+    c_result = (
+        supabase.table("complaints")
+        .select(
+            "complaint_id, current_tier, escalation_count, escalation_path, "
+            "max_tier_reached, is_escalating, escalation_loop_detected, last_escalation_at"
+        )
+        .eq("complaint_id", complaint_id)
+        .execute()
+    )
+    if not c_result.data:
+        raise HTTPException(status_code=404, detail=f"Complaint {complaint_id} not found.")
+
+    row = c_result.data[0]
+
+    # Escalation history audit trail
+    h_result = (
+        supabase.table("complaint_escalation_history")
+        .select(
+            "from_tier, to_tier, escalation_reason, confidence_before, "
+            "escalation_decision_reasoning, signals_detected, escalated_at, status"
+        )
+        .eq("complaint_id", complaint_id)
+        .order("escalated_at", desc=False)
+        .execute()
+    )
+
+    escalation_path = row.get("escalation_path") or []
+    next_action = "idle"
+    if row.get("is_escalating"):
+        next_action = f"attempting_resolution_at_tier_{row.get('current_tier')}"
+    elif row.get("escalation_count", 0) > 0:
+        next_action = "escalation_complete"
+
+    return {
+        "complaint_id": complaint_id,
+        "is_escalating": row.get("is_escalating", False),
+        "current_tier": row.get("current_tier"),
+        "escalation_count": row.get("escalation_count", 0),
+        "escalation_path": escalation_path,
+        "max_tier_reached": row.get("max_tier_reached", 0),
+        "last_escalation_at": row.get("last_escalation_at"),
+        "escalation_loop_detected": row.get("escalation_loop_detected", False),
+        "next_action": next_action,
+        "escalation_history": h_result.data or [],
+    }

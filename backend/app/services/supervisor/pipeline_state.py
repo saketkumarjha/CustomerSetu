@@ -58,17 +58,42 @@ class PipelineState(TypedDict):
     root_cause: Optional[str]
     action_steps: Optional[list]
     confidence_score: Optional[float]
+    authority_sufficient: Optional[bool]
 
     # ── Grounding Agent outputs (Phase 8) ────────────────────────────────
     grounding_score: Optional[float]
     grounding_warnings: Optional[list]
 
-    # ── Routing outputs (Phase 9) ────────────────────────────────────────
-    route: Optional[str]          # "auto_respond" | "human_review"
+    # ── Routing outputs (Phase 9 + Agent 10.5) ──────────────────────────
+    route: Optional[str]          # "AUTO" | "HUMAN" | "ESCALATE"
     risk_score: Optional[float]
     sla_hours: Optional[int]
     rbi_tat_deadline: Optional[str]
     routing_reason: Optional[str]
+    current_tier: Optional[int]        # tier where complaint currently sits (from DB)
+    assigned_tier: Optional[int]       # final tier decided by Agent 10 / 10.5
+    escalation_decision: Optional[str] # "ESCALATE" | "HUMAN_AT_CURRENT_TIER" (Agent 10.5)
+
+    # ── Auto-response outputs (Route 1: confidence >= 95%) ───────────────
+    formatted_response: Optional[str]    # final formatted message sent to customer
+    notification_channel: Optional[str]  # channel used for the auto-send
+    customer_notified_at: Optional[str]  # ISO datetime of send
+    escalation_info: Optional[dict]      # escalation timeline injected into the response
+
+    # ── Auto-Escalation tracking (Route 3) ──────────────────────────────
+    escalation_count: Optional[int]
+    escalation_path: Optional[list]
+    is_escalating: Optional[bool]
+    escalation_orchestrator_result: Optional[dict]  # full result from execute_escalation()
+
+    # ── Tier-aware fields (used by resolution_node + _save_pipeline_outputs) ──
+    tier_level: Optional[int]
+    tier_scope: Optional[str]
+    tier_contact_info: Optional[str]
+    previous_tier_attempts: Optional[str]
+    tier_kb_coverage_score: Optional[float]
+    missing_info_indicators: Optional[list]
+    resolution_type: Optional[str]
 
     # ── Accumulating lists — operator.add means append, not overwrite ────
     # Each agent appends one AgentOutput dict to this list

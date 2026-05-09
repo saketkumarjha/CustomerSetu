@@ -49,17 +49,100 @@ async def run_pipeline(initial_state: PipelineState) -> None:
         await _save_pipeline_outputs(complaint_id, final_state)
 
         # Build the final summary for the SSE stream and idempotency cache
+        route = final_state.get("route")
         final_summary = {
-            "complaint_id": complaint_id,
-            "status": "complete",
-            "route": final_state.get("route"),
-            "category": final_state.get("category"),
-            "severity": final_state.get("severity"),
+            "complaint_id":     complaint_id,
+            "status":           "complete",
+            "route":            route,
+            "category":         final_state.get("category"),
+            "severity":         final_state.get("severity"),
             "confidence_score": final_state.get("confidence_score"),
             "is_rbi_reportable": final_state.get("is_rbi_reportable"),
-            "sla_hours": final_state.get("sla_hours"),
-            "agent_count": len(final_state.get("explanation_trace", [])),
+            "sla_hours":        final_state.get("sla_hours"),
+            "agent_count":      len(final_state.get("explanation_trace", [])),
         }
+
+        # Append route-specific details
+        orch_result = final_state.get("escalation_orchestrator_result") or {}
+
+        if route == "AUTO":
+            escalation_info = final_state.get("escalation_info") or {}
+            final_summary.update({
+                "tier_resolved":        final_state.get("current_tier", 1),
+                "confidence":           final_state.get("confidence_score"),
+                "response_sent":        bool(final_state.get("customer_notified_at")),
+                "notification_channel": final_state.get("notification_channel"),
+                "customer_notified_at": final_state.get("customer_notified_at"),
+                "escalation_info": {
+                    "next_tier":           escalation_info.get("next_tier"),
+                    "escalation_deadline": escalation_info.get("escalation_deadline_iso"),
+                },
+            })
+
+        elif orch_result.get("final_route") == "auto_respond":
+            # Route 3 resolved with auto-respond at a higher tier
+            final_summary.update({
+                "route":                "escalation_auto_respond",
+                "tier_resolved":        orch_result.get("final_tier"),
+                "confidence":           orch_result.get("confidence_score"),
+                "response_sent":        bool(orch_result.get("customer_notified_at")),
+                "notification_channel": orch_result.get("notification_channel"),
+                "customer_notified_at": orch_result.get("customer_notified_at"),
+                "escalation_summary": {
+                    "escalation_path":     orch_result.get("escalation_path", []),
+                    "total_escalations":   orch_result.get("total_escalations", 0),
+                    "stop_reason":         orch_result.get("stop_reason"),
+                    "final_tier":          orch_result.get("final_tier"),
+                },
+            })
+
+        elif orch_result.get("final_route") == "human_review" and orch_result.get("total_escalations", 0) > 0:
+            # Route 3 ended at human review after escalation attempts
+            final_summary.update({
+                "route":      "escalation_human_review",
+                "tier":       orch_result.get("final_tier"),
+                "confidence": orch_result.get("confidence_score"),
+                "escalation_summary": {
+                    "escalation_path":   orch_result.get("escalation_path", []),
+                    "total_escalations": orch_result.get("total_escalations", 0),
+                    "stop_reason":       orch_result.get("stop_reason"),
+                    "final_tier":        orch_result.get("final_tier"),
+                },
+            })
+
+        elif final_state.get("escalation_decision") == "HUMAN_AT_CURRENT_TIER":
+            # Fetch queue state written by routing_node
+            from app.db.supabase_client import get_supabase
+            supabase = get_supabase()
+            q_result = (
+                supabase.table("agent_queue")
+                .select("assigned_to, queue_position, priority_score, sla_deadline, estimated_review_time")
+                .eq("complaint_id", complaint_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            q_row = q_result.data[0] if q_result.data else {}
+
+            final_summary.update({
+                "route":       "human_review",
+                "tier":        final_state.get("assigned_tier") or final_state.get("current_tier", 1),
+                "confidence":  final_state.get("confidence_score"),
+                "escalation_not_triggered_reason": (
+                    "No higher-tier signals detected — issue matches current tier scope"
+                ),
+                "assignment": {
+                    "assigned_to":          q_row.get("assigned_to"),
+                    "queue_position":       q_row.get("queue_position"),
+                    "estimated_wait_time":  f"{q_row.get('estimated_review_time', 12)} min",
+                    "sla_deadline":         q_row.get("sla_deadline"),
+                },
+                "draft_response": {
+                    "text":           final_state.get("draft_response"),
+                    "confidence":     final_state.get("confidence_score"),
+                    "can_be_accepted": (final_state.get("confidence_score") or 0) >= 0.80,
+                },
+            })
 
         # Send pipeline_complete event before closing stream
         await event_bus.publish(complaint_id, {
@@ -118,6 +201,21 @@ async def _save_pipeline_outputs(complaint_id: str, state: PipelineState) -> Non
         "rbi_tat_deadline": state.get("rbi_tat_deadline"),
         "pipeline_status": "complete",
         "status": state.get("route", "complete"),
+        "tier_level": state.get("tier_level"),
+        "tier_scope": state.get("tier_scope"),
+        "tier_kb_coverage_score": state.get("tier_kb_coverage_score"),
+        "missing_info_indicators": state.get("missing_info_indicators", []),
+        "resolution_type": state.get("resolution_type"),
+        "authority_sufficient": state.get("authority_sufficient"),
+        # Auto-response tracking (populated when route == "AUTO" or orchestrator resolves)
+        "final_response_text":  state.get("formatted_response"),
+        "response_sent_at":     state.get("customer_notified_at"),
+        "response_channel":     state.get("notification_channel"),
+        "tier_resolved_at":     state.get("current_tier"),
+        # Escalation tracking (Route 3)
+        "escalation_count":     state.get("escalation_count", 0),
+        "escalation_path":      state.get("escalation_path", []),
+        "is_escalating":        False,   # always clear after pipeline completes
     }
 
     try:
@@ -210,6 +308,7 @@ async def trigger_pipeline(
         "root_cause": None,
         "action_steps": None,
         "confidence_score": None,
+        "authority_sufficient": None,
         "grounding_score": None,
         "grounding_warnings": None,
         "route": None,
@@ -217,6 +316,9 @@ async def trigger_pipeline(
         "sla_hours": None,
         "rbi_tat_deadline": None,
         "routing_reason": None,
+        "current_tier": complaint.get("current_tier", 1),
+        "assigned_tier": None,
+        "escalation_decision": None,
 
         # Accumulating lists — start empty
         "explanation_trace": [],
@@ -224,6 +326,27 @@ async def trigger_pipeline(
 
         "pipeline_status": "started",
         "current_agent": None,
+
+        # Auto-response tracking — populated by routing_node when route == "AUTO"
+        "formatted_response":    None,
+        "notification_channel":  None,
+        "customer_notified_at":  None,
+        "escalation_info":       None,
+
+        # Route 3 escalation tracking — populated by escalation_orchestrator
+        "escalation_count":               complaint.get("escalation_count", 0),
+        "escalation_path":                complaint.get("escalation_path", []),
+        "is_escalating":                  False,
+        "escalation_orchestrator_result": None,
+
+        # Tier-aware fields
+        "tier_level":               complaint.get("current_tier", 1),
+        "tier_scope":               complaint.get("tier_scope"),
+        "tier_contact_info":        None,
+        "previous_tier_attempts":   None,
+        "tier_kb_coverage_score":   None,
+        "missing_info_indicators":  None,
+        "resolution_type":          None,
     }
 
     # Start pipeline in background — does not block this response
