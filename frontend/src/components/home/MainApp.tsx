@@ -10,6 +10,7 @@ import { PipelineTab } from '../pipeline/PipelineTab'
 import { AnalyticsTab } from '../analytics/AnalyticsTab'
 import { RBITab } from '../rbi/RBITab'
 import { SLATab } from '../sla/SLATab'
+import { KBAdminTab } from '../kb/KBAdminTab'
 
 export function MainApp() {
   const [active, setActive] = useState<TabId>('overview')
@@ -41,6 +42,7 @@ export function MainApp() {
           {active === 'analytics'   && <AnalyticsTab />}
           {active === 'rbi'         && <RBITab />}
           {active === 'sla'         && <SLATab />}
+          {active === 'kb'          && <KBAdminTab />}
         </main>
       </div>
     </div>

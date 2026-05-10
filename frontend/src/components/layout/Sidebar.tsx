@@ -1,4 +1,4 @@
-import { BarChart2, ClipboardList, Cpu, TrendingUp, X, PlusCircle, Shield, Clock } from 'lucide-react'
+import { BarChart2, ClipboardList, Cpu, TrendingUp, X, PlusCircle, Shield, Clock, BookOpen } from 'lucide-react'
 import type { TabId } from '../../types'
 
 interface Props {
@@ -16,6 +16,7 @@ const TABS: { id: TabId; icon: React.ReactNode; label: string; badge?: string }[
   { id: 'analytics', icon: <TrendingUp size={16} />, label: 'Analytics' },
   { id: 'rbi', icon: <Shield size={16} />, label: 'RBI Compliance' },
   { id: 'sla', icon: <Clock size={16} />, label: 'SLA Tracker' },
+  { id: 'kb', icon: <BookOpen size={16} />, label: 'KB Admin', badge: 'ADMIN' },
 ]
 
 export function Sidebar({ active, setActive, isOpen, onClose }: Props) {

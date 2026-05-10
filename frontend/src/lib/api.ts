@@ -39,6 +39,27 @@ export async function apiPost<T>(
   return handleResponse<T>(res)
 }
 
+export async function apiPut<T>(path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  })
+  return handleResponse<T>(res)
+}
+
+export async function apiDelete(path: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`
+    try { detail = (await res.json()).detail ?? detail } catch { /* ignore */ }
+    throw new Error(detail)
+  }
+}
+
 export async function apiPostForm<T>(
   path: string,
   formData: FormData,
@@ -100,6 +121,36 @@ export const api = {
   sla: {
     summary: () => apiGet<SLASummary>('/api/v1/sla/summary'),
     atRisk: () => apiGet<SLAAtRisk>('/api/v1/sla/at-risk'),
+  },
+  kb: {
+    reference: () => apiGet<KBReference>('/api/v1/admin/kb/reference'),
+    metrics: () => apiGet<KBMetrics>('/api/v1/admin/kb/metrics'),
+    entries: (params?: KBEntriesParams) => {
+      const qs = new URLSearchParams()
+      if (params?.category) qs.set('category', params.category)
+      if (params?.tier_level !== undefined) qs.set('tier_level', String(params.tier_level))
+      if (params?.verified !== undefined) qs.set('verified', String(params.verified))
+      if (params?.search) qs.set('search', params.search)
+      qs.set('page', String(params?.page ?? 1))
+      qs.set('page_size', String(params?.page_size ?? 20))
+      return apiGet<KBEntriesResponse>(`/api/v1/admin/kb/entries?${qs}`)
+    },
+    createEntry: (body: KBEntryPayload) => apiPost<KBEntry>('/api/v1/admin/kb/entries', body),
+    getEntry: (id: number) => apiGet<KBEntry>(`/api/v1/admin/kb/entries/${id}`),
+    updateEntry: (id: number, body: KBEntryPayload) => apiPut<KBEntry>(`/api/v1/admin/kb/entries/${id}`, body),
+    deleteEntry: (id: number) => apiDelete(`/api/v1/admin/kb/entries/${id}`),
+    analytics: () => apiGet<KBAnalytics>('/api/v1/admin/kb/analytics'),
+    bulkValidate: (formData: FormData) => apiPostForm<KBBulkValidateResult>('/api/v1/admin/kb/bulk-validate', formData),
+    bulkImport: (formData: FormData) => apiPostForm<KBBulkImportResult>('/api/v1/admin/kb/bulk-import', formData),
+    queue: () => apiGet<KBQueueEntry[]>('/api/v1/admin/kb/queue'),
+    approveQueue: (id: number, body: KBEntryPayload) => apiPost<KBEntry>(`/api/v1/admin/kb/queue/${id}/approve`, body),
+    rejectQueue: (id: number, reason: string) => apiPost(`/api/v1/admin/kb/queue/${id}/reject`, { reason }),
+    bulkApprove: (body: { min_quality_score: number; tier_level?: number; category?: string }) =>
+      apiPost('/api/v1/admin/kb/queue/bulk-approve', body),
+    bulkReject: (reason: string) => apiPost('/api/v1/admin/kb/queue/bulk-reject', { reason }),
+    processQueue: () => apiPost<string>('/api/v1/admin/kb/jobs/process-queue'),
+    weeklyReview: () => apiPost('/api/v1/admin/kb/jobs/weekly-review'),
+    cleanup: () => apiPost('/api/v1/admin/kb/jobs/cleanup'),
   },
 }
 
@@ -317,6 +368,113 @@ export interface SLASummary {
   predicted_breach: { critical: number; high: number; total_at_risk: number }
   action_required: boolean
 }
+
+// ── KB Admin types ────────────────────────────────────────────────────────────
+
+export interface KBReference {
+  categories: string[]
+  tier_labels: Record<string, string>
+  tier_scope_formats: Record<string, string | null>
+  regions: string[]
+  embedding_model: string
+  embedding_dimensions: number
+}
+
+export interface KBMetrics {
+  total: number
+  verified: number
+  pending: number
+  avg_quality: number
+  tier_distribution: Array<{ tier_level: number; label: string; count: number }>
+  coverage_gaps: Array<{ category: string; count: number; needed: number }>
+  recent_additions: KBEntry[]
+}
+
+export interface KBEntry {
+  id: number
+  tier_level: number
+  tier_scope: string
+  category: string
+  issue_type: string
+  quality_score: number
+  verified: boolean
+  usage_count: number
+  source: string
+  created_at: string
+  updated_at: string
+  resolution_text: string
+}
+
+export interface KBEntryPayload {
+  tier_level: number
+  tier_scope: string
+  category: string
+  issue_type: string
+  resolution_text: string
+  quality_score: number
+  verified: boolean
+}
+
+export interface KBEntriesParams {
+  category?: string
+  tier_level?: number
+  verified?: boolean
+  search?: string
+  page?: number
+  page_size?: number
+}
+
+export interface KBEntriesResponse {
+  entries: KBEntry[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export interface KBQueueEntry {
+  id: number
+  complaint_id: string
+  resolution_text: string
+  scheduled_for: string
+  added_to_kb: boolean
+  created_at: string
+  tier_level: number
+  tier_scope: string
+  category: string
+  issue_type: string
+  confidence_score: number
+  recommended_quality_score: number
+  quality_signals_json: Record<string, unknown>
+  agent_action: string
+  customer_feedback_score: number
+  resolution_type: string
+  rejection_reason: string
+}
+
+export interface KBAnalytics {
+  top_entries_by_usage: Array<Record<string, unknown>>
+  category_usage: Array<Record<string, unknown>>
+  tier_coverage_matrix: Array<Record<string, unknown>>
+  category_gaps: Array<Record<string, unknown>>
+  quality_distribution: Array<Record<string, unknown>>
+  tier_quality: Array<Record<string, unknown>>
+}
+
+export interface KBBulkValidateResult {
+  total: number
+  valid: number
+  errors: number
+  rows: Array<Record<string, unknown>>
+}
+
+export interface KBBulkImportResult {
+  imported: number
+  errors: number
+  rows?: Array<Record<string, unknown>>
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface SLAAtRisk {
   generated_at: string

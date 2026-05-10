@@ -13,6 +13,7 @@ const LABELS: Record<TabId, { label: string; desc: string }> = {
   analytics: { label: 'Analytics', desc: 'Volumes, satisfaction, and trends' },
   rbi: { label: 'RBI Compliance', desc: 'Regulatory reporting and deadlines' },
   sla: { label: 'SLA Tracker', desc: 'Targets and overdue cases' },
+  kb: { label: 'KB Admin', desc: 'Manage knowledge base entries and review queue' },
 }
 
 export function Breadcrumb({ active }: Props) {

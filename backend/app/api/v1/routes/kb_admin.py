@@ -124,7 +124,7 @@ def _insert_kb(db, row: dict) -> dict:
     return result
 
 
-def _update_kb(db, entry_id: int, row: dict):
+def _update_kb(db, entry_id: str, row: dict):
     try:
         db.table("knowledge_base").update(row).eq("id", entry_id).execute()
     except Exception as e:
@@ -157,7 +157,7 @@ class KBEntryUpdate(BaseModel):
 
 
 class KBEntrySummary(BaseModel):
-    id: int
+    id: str
     tier_level: int
     tier_scope: Optional[str] = None
     category: str
@@ -195,7 +195,7 @@ class CoverageGap(BaseModel):
 
 
 class RecentEntry(BaseModel):
-    id: int
+    id: str
     tier_level: int
     category: str
     issue_type: Optional[str] = None
@@ -440,7 +440,7 @@ async def list_entries(
 
 
 @router.get("/entries/{entry_id}", response_model=KBEntryDetail, summary="Get a single KB entry including resolution_text")
-async def get_entry(entry_id: int):
+async def get_entry(entry_id: str):
     db = get_supabase()
     try:
         rows = db.table("knowledge_base").select(
@@ -490,7 +490,7 @@ async def create_entry(payload: KBEntryCreate):
 
 
 @router.put("/entries/{entry_id}", response_model=KBEntryDetail, summary="Update a KB entry (regenerates embedding only when resolution_text changes)")
-async def update_entry(entry_id: int, payload: KBEntryUpdate):
+async def update_entry(entry_id: str, payload: KBEntryUpdate):
     if payload.tier_level > 0 and not payload.tier_scope:
         raise HTTPException(status_code=422, detail="tier_scope is required when tier_level > 0")
 
@@ -534,7 +534,7 @@ async def update_entry(entry_id: int, payload: KBEntryUpdate):
 
 
 @router.delete("/entries/{entry_id}", summary="Delete a KB entry")
-async def delete_entry(entry_id: int):
+async def delete_entry(entry_id: str):
     db = get_supabase()
     try:
         existing = db.table("knowledge_base").select("id").eq("id", entry_id).execute().data
