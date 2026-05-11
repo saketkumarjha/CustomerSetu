@@ -4,6 +4,7 @@ Dashboard Aggregator — Pre-compute agent and team metrics for the dashboard.
 
 from app.db.supabase_client import get_supabase
 from app.services.metrics_service import calculate_agent_efficiency
+from app.utils.postgrest_errors import is_missing_relation_error
 
 
 def get_agent_metrics(
@@ -19,28 +20,38 @@ def get_agent_metrics(
     efficiency = calculate_agent_efficiency(agent_id, date_from, date_to)
 
     # Current workload
-    workload_result = (
-        supabase.table("agent_queue")
-        .select("id", count="exact")
-        .eq("assigned_to", agent_id)
-        .in_("status", ["ASSIGNED", "IN_REVIEW"])
-        .execute()
-    )
-    current_workload = workload_result.count or 0
+    try:
+        workload_result = (
+            supabase.table("agent_queue")
+            .select("id", count="exact")
+            .eq("assigned_to", agent_id)
+            .in_("status", ["ASSIGNED", "IN_REVIEW"])
+            .execute()
+        )
+        current_workload = workload_result.count or 0
+    except Exception as exc:
+        if not is_missing_relation_error(exc):
+            raise
+        current_workload = 0
 
     # Category breakdown
-    query = (
-        supabase.table("agent_assignments")
-        .select("complaint_id")
-        .eq("agent_id", agent_id)
-        .not_.is_("completed_at", "null")
-    )
-    if date_from:
-        query = query.gte("completed_at", date_from)
-    if date_to:
-        query = query.lte("completed_at", date_to)
-    assign_result = query.execute()
-    complaint_ids = [r["complaint_id"] for r in (assign_result.data or [])]
+    complaint_ids: list[str] = []
+    try:
+        query = (
+            supabase.table("agent_assignments")
+            .select("complaint_id")
+            .eq("agent_id", agent_id)
+            .not_.is_("completed_at", "null")
+        )
+        if date_from:
+            query = query.gte("completed_at", date_from)
+        if date_to:
+            query = query.lte("completed_at", date_to)
+        assign_result = query.execute()
+        complaint_ids = [r["complaint_id"] for r in (assign_result.data or [])]
+    except Exception as exc:
+        if not is_missing_relation_error(exc):
+            raise
 
     categories_handled: dict = {}
     if complaint_ids:
@@ -93,14 +104,19 @@ def get_team_metrics(
 
     # Queue size for this tier
     supabase = get_supabase()
-    q_result = (
-        supabase.table("agent_queue")
-        .select("id", count="exact")
-        .eq("tier_level", tier_level)
-        .in_("status", ["QUEUED", "ASSIGNED", "IN_REVIEW"])
-        .execute()
-    )
-    queue_size = q_result.count or 0
+    try:
+        q_result = (
+            supabase.table("agent_queue")
+            .select("id", count="exact")
+            .eq("tier_level", tier_level)
+            .in_("status", ["QUEUED", "ASSIGNED", "IN_REVIEW"])
+            .execute()
+        )
+        queue_size = q_result.count or 0
+    except Exception as exc:
+        if not is_missing_relation_error(exc):
+            raise
+        queue_size = 0
 
     return {
         "tier_level":     tier_level,

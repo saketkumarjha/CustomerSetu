@@ -4,12 +4,38 @@ import {
   RotateCcw, ArrowUpCircle, Loader2, Bot, Clock, CheckCircle2, Play,
 } from 'lucide-react'
 import type { Complaint } from '../../../types'
-import type { ApiComplaint, AgentDecision } from '../../../lib/api'
+import type { ApiComplaint, AgentDecision, GroundingWarningItem } from '../../../lib/api'
 import { SeverityBadge } from '../../ui/SeverityBadge'
 import { ChannelBadge } from '../../ui/ChannelBadge'
 import { SlaBadge } from '../../ui/SlaBadge'
 import { getInitials, getActorColor } from '../../../utils/styles'
 import { api } from '../../../lib/api'
+import { EscalationStatusSection } from './EscalationStatusSection'
+import { ShadowOverrideSection } from './ShadowOverrideSection'
+
+function GroundingWarningRow({ w }: { w: string | GroundingWarningItem }) {
+  if (typeof w === 'string') {
+    return <li className="text-slate-600">{w}</li>
+  }
+  const title = [w.type, w.claim].filter(Boolean).join(' — ')
+  return (
+    <li className="text-slate-600 border-l-2 border-amber-400/70 pl-2 py-1.5 space-y-0.5">
+      {title && <div className="font-medium text-slate-800">{title}</div>}
+      {w.issue && (
+        <div>
+          <span className="text-slate-400">Issue: </span>
+          {w.issue}
+        </div>
+      )}
+      {w.suggestion && (
+        <div className="text-slate-500">
+          <span className="text-slate-400">Suggestion: </span>
+          {w.suggestion}
+        </div>
+      )}
+    </li>
+  )
+}
 
 interface Props {
   complaint: Complaint
@@ -18,6 +44,8 @@ interface Props {
   apiDetail?: ApiComplaint | null
   pipelineAvailable?: boolean
   onAfterRunPipeline?: () => void
+  /** Refetch complaint row after shadow override or other updates */
+  onComplaintUpdated?: () => void
 }
 
 export function ComplaintDetailPanel({
@@ -27,6 +55,7 @@ export function ComplaintDetailPanel({
   apiDetail,
   pipelineAvailable = false,
   onAfterRunPipeline,
+  onComplaintUpdated,
 }: Props) {
   const [draft, setDraft] = useState(complaint.agentResult.resolution)
   const [sent, setSent] = useState(false)
@@ -117,7 +146,12 @@ export function ComplaintDetailPanel({
         </div>
         <div className="flex items-center gap-2">
           {loadingDetail && <Loader2 size={14} className="text-blue-200 animate-spin" />}
-          {apiDetail?.pipeline_status === 'complete' && (
+          {apiDetail?.status === 'shadow_sent' && (
+            <span className="text-xs bg-amber-500/25 text-amber-50 px-2 py-0.5 rounded-md border border-amber-300/40">
+              Shadow sent — correction window
+            </span>
+          )}
+          {apiDetail?.pipeline_status === 'complete' && apiDetail?.status !== 'shadow_sent' && (
             <span className="text-xs bg-white/15 text-white px-2 py-0.5 rounded-md border border-white/20">
               Analysis complete
             </span>
@@ -180,6 +214,14 @@ export function ComplaintDetailPanel({
             </p>
           )}
         </section>
+
+        {/* Shadow auto-send: human correction within deadline (only when API exposes this state) */}
+        {apiDetail &&
+          (apiDetail.status === 'shadow_sent' ||
+            apiDetail.status === 'override_closed' ||
+            apiDetail.shadow_overridden) && (
+            <ShadowOverrideSection apiDetail={apiDetail} onApplied={() => onComplaintUpdated?.()} />
+          )}
 
         {/* AI analysis — use explanation_trace if available, else use agentResult */}
         <section>
@@ -315,6 +357,9 @@ export function ComplaintDetailPanel({
           )}
         </section>
 
+        {/* Tier routing snapshot (live API only) */}
+        <EscalationStatusSection complaintId={apiDetail?.complaint_id} enabled={!!apiDetail} />
+
         {/* Grounding info */}
         {apiDetail?.grounding_score !== undefined && (
           <section className="rounded-md p-3 border border-slate-200 bg-slate-50/80 text-xs text-slate-700">
@@ -323,9 +368,9 @@ export function ComplaintDetailPanel({
               Match score: <span className="font-semibold text-ub-blue">{Math.round(apiDetail.grounding_score * 100)}%</span>
             </div>
             {apiDetail.grounding_warnings && apiDetail.grounding_warnings.length > 0 && (
-              <ul className="mt-1.5 space-y-0.5">
+              <ul className="mt-1.5 space-y-1">
                 {apiDetail.grounding_warnings.map((w, i) => (
-                  <li key={i} className="text-slate-600">{w}</li>
+                  <GroundingWarningRow key={i} w={w} />
                 ))}
               </ul>
             )}
@@ -355,8 +400,9 @@ export function ComplaintDetailPanel({
           </section>
         )}
 
-        {/* AI Draft Response */}
-        {(complaint.agentResult.resolution && complaint.agentResult.resolution !== '—') && (
+        {/* AI Draft Response — hidden while shadow_sent (correction happens in Shadow section above) */}
+        {(complaint.agentResult.resolution && complaint.agentResult.resolution !== '—') &&
+          apiDetail?.status !== 'shadow_sent' && (
           <section>
             <div className="flex items-center justify-between mb-2">
               <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">AI Draft Response</div>

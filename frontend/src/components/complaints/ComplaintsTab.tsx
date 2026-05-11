@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import type { Complaint, Status, Severity, TabId } from '../../types'
 import { COMPLAINTS } from '../../data/complaints'
@@ -127,6 +127,24 @@ export function ComplaintsTab({ setActive }: { setActive?: (id: TabId) => void }
     setApiComplaintDetail(null)
   }
 
+  const refreshComplaintDetail = useCallback(async () => {
+    if (!selected || !usingApi) return
+    setLoadingDetail(true)
+    try {
+      const detail = await api.complaints.get(selected.id)
+      setApiComplaintDetail(detail)
+    } catch {
+      setApiComplaintDetail(null)
+    } finally {
+      setLoadingDetail(false)
+    }
+  }, [selected, usingApi])
+
+  const onComplaintUpdated = useCallback(() => {
+    refetch()
+    void refreshComplaintDetail()
+  }, [refetch, refreshComplaintDetail])
+
   // Enrich selected complaint with API detail data if available
   const enrichedSelected: Complaint | null = selected && apiComplaintDetail
     ? {
@@ -188,6 +206,7 @@ export function ComplaintsTab({ setActive }: { setActive?: (id: TabId) => void }
             apiDetail={apiComplaintDetail}
             pipelineAvailable={usingApi}
             onAfterRunPipeline={() => setActive?.('pipeline')}
+            onComplaintUpdated={onComplaintUpdated}
           />
         )}
       </div>
@@ -209,6 +228,7 @@ export function ComplaintsTab({ setActive }: { setActive?: (id: TabId) => void }
               apiDetail={apiComplaintDetail}
               pipelineAvailable={usingApi}
               onAfterRunPipeline={() => setActive?.('pipeline')}
+              onComplaintUpdated={onComplaintUpdated}
             />
           </div>
         </div>

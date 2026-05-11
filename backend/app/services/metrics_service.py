@@ -2,8 +2,8 @@
 Metrics Service — Track agent review timing and quality signals.
 """
 
-from datetime import datetime, timezone
 from app.db.supabase_client import get_supabase
+from app.utils.postgrest_errors import is_missing_relation_error
 
 
 def track_review_started(complaint_id: str, agent_id: str) -> None:
@@ -51,8 +51,15 @@ def calculate_agent_efficiency(
     if date_to:
         query = query.lte("completed_at", date_to)
 
-    result = query.execute()
-    rows = result.data or []
+    try:
+        result = query.execute()
+    except Exception as exc:
+        if is_missing_relation_error(exc):
+            rows = []
+        else:
+            raise
+    else:
+        rows = result.data or []
 
     if not rows:
         return {

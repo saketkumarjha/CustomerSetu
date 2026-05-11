@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import ChatbotLauncher from "../chatbot/ChatbotLauncher";
 import ChatbotWindow from "../chatbot/ChatbotWindow";
+import ChannelsDemoSection from "./ChannelsDemoSection";
 import { useState } from "react";
 
 const IMG = {
@@ -707,6 +708,7 @@ export default function LandingPage() {
       <FeaturesSection />
       <CTASection />
       <OmnichannelSection />
+      <ChannelsDemoSection />
       <Footer />
       <ChatbotLauncher onClick={() => setChatbotOpen(true)} />
       {chatbotOpen && <ChatbotWindow onClose={() => setChatbotOpen(false)} />}
