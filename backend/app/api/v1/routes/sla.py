@@ -51,9 +51,9 @@ async def get_sla_at_risk(
             "created_at, route, status, rbi_tat_deadline, "
             "compliance_category, is_rbi_reportable, channel"
         )
-        .eq("route", "human_review")
+        .in_("route", ["HUMAN", "human_review", "ESCALATE", "escalate"])
         .eq("pipeline_status", "complete")
-        .not_.in_("status", ["closed", "resolved"])
+        .not_.in_("status", ["closed", "resolved", "auto_closed"])
         .execute()
     )
 
@@ -63,7 +63,10 @@ async def get_sla_at_risk(
         return {
             "generated_at": now.isoformat(),
             "message": "No open human review complaints found.",
+            "total_open_complaints": 0,
             "at_risk_count": 0,
+            "risk_summary": {"CRITICAL": 0, "HIGH": 0, "MODERATE": 0, "LOW": 0},
+            "system_alert": None,
             "predictions": [],
         }
 
@@ -150,9 +153,9 @@ async def predict_single_complaint(complaint_id: str):
     queue_result = (
         supabase.table("complaints")
         .select("complaint_id", count="exact")
-        .eq("route", "human_review")
+        .in_("route", ["HUMAN", "human_review", "ESCALATE", "escalate"])
         .eq("pipeline_status", "complete")
-        .not_.in_("status", ["closed", "resolved"])
+        .not_.in_("status", ["closed", "resolved", "auto_closed"])
         .execute()
     )
     queue_depth = queue_result.count or 1
@@ -206,7 +209,8 @@ async def get_sla_summary():
 
     open_complaints = open_result.data or []
     queue_depth = len([
-        c for c in open_complaints if c.get("route") == "human_review"
+        c for c in open_complaints
+        if (c.get("route") or "").upper() in ("HUMAN", "HUMAN_REVIEW", "ESCALATE")
     ])
 
     # Count RBI TAT breaches
@@ -227,7 +231,10 @@ async def get_sla_summary():
             continue
 
     # Run predictions on human_review complaints
-    human_review = [c for c in open_complaints if c.get("route") == "human_review"]
+    human_review = [
+        c for c in open_complaints
+        if (c.get("route") or "").upper() in ("HUMAN", "HUMAN_REVIEW", "ESCALATE")
+    ]
     critical_count = 0
     high_count = 0
 

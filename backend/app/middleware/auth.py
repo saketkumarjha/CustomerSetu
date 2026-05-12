@@ -5,6 +5,9 @@ from app.core.config import get_settings
 # These paths bypass auth entirely
 PUBLIC_PATHS = {"/health", "/", "/docs", "/redoc", "/openapi.json"}
 
+# Webhook paths called by external services (Twilio etc.) — no API key
+WEBHOOK_PATHS = {"/api/v1/channels/whatsapp/webhook"}
+
 
 async def verify_api_key(request: Request, call_next):
     """
@@ -17,6 +20,10 @@ async def verify_api_key(request: Request, call_next):
     For Production: JWT tokens with user roles.
     """
     if request.url.path in PUBLIC_PATHS:
+        return await call_next(request)
+
+    # Twilio webhooks don't send API keys — exempt them
+    if request.url.path in WEBHOOK_PATHS:
         return await call_next(request)
 
     settings = get_settings()

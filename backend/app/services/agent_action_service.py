@@ -41,10 +41,29 @@ def _log_feedback(
 
 
 def _simulate_send(customer_id: str, channel: str, response: str, complaint_id: str) -> str:
+    """
+    Send response to customer.
+    - whatsapp channel → real Twilio dispatch
+    - all other channels → simulation (print to console)
+    """
     now = datetime.now(timezone.utc).isoformat()
-    print(f"\n[AGENT ACTION] Sending to customer {customer_id} via {channel}")
-    print(f"[AGENT ACTION] Complaint: {complaint_id}")
-    print(f"[AGENT ACTION] Response: {response[:120]}...")
+
+    if channel == "whatsapp":
+        try:
+            from app.services.whatsapp_service import send_whatsapp_reply
+            to = customer_id if customer_id.startswith("whatsapp:") else f"whatsapp:{customer_id}"
+            sent = send_whatsapp_reply(to, response)
+            if sent:
+                print(f"[AGENT ACTION] WhatsApp reply sent to {customer_id} for {complaint_id}")
+            else:
+                print(f"[AGENT ACTION] WhatsApp send failed for {complaint_id} — logged")
+        except Exception as exc:
+            print(f"[AGENT ACTION] WhatsApp dispatch error: {exc}")
+    else:
+        print(f"\n[AGENT ACTION] Sending to customer {customer_id} via {channel}")
+        print(f"[AGENT ACTION] Complaint: {complaint_id}")
+        print(f"[AGENT ACTION] Response: {response[:120]}...")
+
     return now
 
 

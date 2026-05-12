@@ -14,8 +14,8 @@ import uuid
 import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, status
+from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 
 from app.db.supabase_client import get_supabase
@@ -391,3 +391,102 @@ async def get_ivr_audio(filename: str):
         media_type="audio/mpeg",
         filename=filename,
     )
+
+
+# ── WhatsApp / Twilio Webhook ─────────────────────────────────────────────────
+
+import asyncio as _asyncio
+import logging as _logging
+from typing import Optional as _Optional
+
+_wa_logger = _logging.getLogger(__name__)
+
+
+@router.post(
+    "/whatsapp/webhook",
+    summary="Twilio WhatsApp incoming message webhook",
+    response_class=PlainTextResponse,
+    tags=["WhatsApp Channel"],
+)
+async def whatsapp_webhook(
+    background_tasks: BackgroundTasks,
+    From: str = Form(...),
+    Body: str = Form(...),
+    NumMedia: _Optional[str] = Form(default="0"),
+):
+    """
+    Twilio calls this endpoint for every incoming WhatsApp message.
+
+    Set in Twilio console → Messaging → WhatsApp Sandbox:
+      "When a message comes in" → POST https://<ngrok>/api/v1/channels/whatsapp/webhook
+
+    Routing:
+      Tier 0 (general query) → instant RAG reply
+      Tier 1+ (branch query) → register complaint + ACK + pipeline
+    """
+    customer_number = From   # "whatsapp:+91XXXXXXXXXX"
+    message_text = Body.strip()
+
+    if not message_text:
+        return ""
+
+    _wa_logger.info("[WHATSAPP] Incoming from %s: %s", customer_number, message_text[:80])
+
+    from app.services.whatsapp_service import detect_tier
+    tier = detect_tier(message_text)
+
+    if tier == 0:
+        background_tasks.add_task(_wa_general_query, customer_number, message_text)
+    else:
+        background_tasks.add_task(_wa_branch_query, customer_number, message_text, tier)
+
+    return ""   # empty TwiML — reply sent via REST API
+
+
+async def _wa_general_query(customer_number: str, message_text: str) -> None:
+    """Instant RAG reply for general queries."""
+    from app.services.whatsapp_service import instant_rag_reply, send_whatsapp_reply
+    try:
+        reply = await _asyncio.to_thread(instant_rag_reply, message_text)
+        send_whatsapp_reply(customer_number, reply)
+        _wa_logger.info("[WHATSAPP] General query answered for %s", customer_number)
+    except Exception as exc:
+        _wa_logger.error("[WHATSAPP] General query failed: %s", exc)
+        from app.services.whatsapp_service import send_whatsapp_reply
+        send_whatsapp_reply(
+            customer_number,
+            "Thank you for contacting Union Bank of India. "
+            "Our team will assist you shortly. Call 1800-22-2244 for urgent help."
+        )
+
+
+async def _wa_branch_query(customer_number: str, message_text: str, tier: int) -> None:
+    """Register complaint, send ACK, run pipeline."""
+    from app.services.whatsapp_service import save_whatsapp_complaint, send_whatsapp_reply
+    try:
+        complaint_id = save_whatsapp_complaint(customer_number, message_text, tier)
+
+        tier_labels = {
+            1: "Branch Level", 2: "Zonal Level", 3: "Regional Level",
+            4: "Head Office", 5: "RBI Ombudsman",
+        }
+        ack = (
+            f"✅ Your complaint has been registered.\n"
+            f"Reference: *{complaint_id}*\n"
+            f"Level: {tier_labels.get(tier, f'Tier {tier}')}\n\n"
+            f"Our team will review and respond within the SLA window. "
+            f"You will receive a reply on this WhatsApp number once resolved."
+        )
+        send_whatsapp_reply(customer_number, ack)
+
+        # Run full AI pipeline
+        await _trigger_pipeline_bg(complaint_id)
+
+    except Exception as exc:
+        _wa_logger.exception("[WHATSAPP] Branch query failed: %s", exc)
+        from app.services.whatsapp_service import send_whatsapp_reply
+        send_whatsapp_reply(
+            customer_number,
+            "We received your message but encountered an issue registering it. "
+            "Please call 1800-22-2244 or visit your nearest branch."
+        )

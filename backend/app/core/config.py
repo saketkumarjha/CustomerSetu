@@ -34,11 +34,11 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     max_file_size_mb: int = 10
 
-    # Notification gateways (leave blank to use simulation in prototype)
-    email_gateway_url: str = ""
-    email_from_address: str = "customercare@unionbankofindia.com"
-    sms_gateway_url: str = ""
-    sms_api_key: str = ""
+    # Twilio WhatsApp
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_number: str = "whatsapp:+14155238886"
+    webhook_base_url: str = ""
 
     # Response templates
     tier_templates_path: str = "app/templates/tier_responses/"
