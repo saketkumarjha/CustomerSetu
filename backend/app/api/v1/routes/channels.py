@@ -231,10 +231,12 @@ SAMPLE_CALLS = [
 
 class TwitterDemoRequest(BaseModel):
     tweet_index: int
+    auto_run: bool = True
 
 
 class IVRDemoRequest(BaseModel):
     call_index: int
+    auto_run: bool = True
 
 
 class ChannelDemoResponse(BaseModel):
@@ -307,15 +309,19 @@ async def twitter_demo(req: TwitterDemoRequest, background_tasks: BackgroundTask
         complaint_text=complaint_text,
     )
 
-    # Trigger the AI pipeline in the background — same as POST /pipeline/run
-    background_tasks.add_task(_trigger_pipeline_bg, complaint_id)
+    if req.auto_run:
+        background_tasks.add_task(_trigger_pipeline_bg, complaint_id)
 
     return ChannelDemoResponse(
         complaint_id=complaint_id,
         channel="twitter",
         customer_id=tweet["username"],
         preview=tweet["text"][:100],
-        message=f"Tweet submitted as {complaint_id}. AI pipeline started.",
+        message=(
+            f"Tweet submitted as {complaint_id}. AI pipeline started."
+            if req.auto_run
+            else f"Tweet submitted as {complaint_id}. Run pipeline manually."
+        ),
     )
 
 
@@ -345,15 +351,19 @@ async def ivr_demo(req: IVRDemoRequest, background_tasks: BackgroundTasks):
         complaint_text=complaint_text,
     )
 
-    # Trigger the AI pipeline in the background
-    background_tasks.add_task(_trigger_pipeline_bg, complaint_id)
+    if req.auto_run:
+        background_tasks.add_task(_trigger_pipeline_bg, complaint_id)
 
     return ChannelDemoResponse(
         complaint_id=complaint_id,
         channel="ivr",
         customer_id=call["customer_id"],
         preview=call["transcript"][:100],
-        message=f"IVR call submitted as {complaint_id}. AI pipeline started.",
+        message=(
+            f"IVR call submitted as {complaint_id}. AI pipeline started."
+            if req.auto_run
+            else f"IVR call submitted as {complaint_id}. Run pipeline manually."
+        ),
     )
 
 

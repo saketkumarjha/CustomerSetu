@@ -358,9 +358,11 @@ function TwitterChannel() {
 
   const simulate = async (index: number) => {
     setStates((s) => ({ ...s, [index]: "loading" }));
+    const autoRun = localStorage.getItem("auto_resolution_enabled") === "true";
     try {
       const res = await apiPost<DemoResult>("/api/v1/channels/twitter/demo", {
         tweet_index: index,
+        auto_run: autoRun,
       });
       setResults((r) => ({ ...r, [index]: res }));
       setStates((s) => ({ ...s, [index]: "success" }));
@@ -510,9 +512,11 @@ function IVRChannel() {
 
   const simulate = async (index: number) => {
     setStates((s) => ({ ...s, [index]: "loading" }));
+    const autoRun = localStorage.getItem("auto_resolution_enabled") === "true";
     try {
       const res = await apiPost<DemoResult>("/api/v1/channels/ivr/demo", {
         call_index: index,
+        auto_run: autoRun,
       });
       setResults((r) => ({ ...r, [index]: res }));
       setStates((s) => ({ ...s, [index]: "success" }));
