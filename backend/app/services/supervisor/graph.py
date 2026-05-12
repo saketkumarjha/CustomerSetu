@@ -16,9 +16,12 @@ never changes, only the node internals.
 """
 
 import asyncio
+import logging
 import time
 from typing import Literal
 from langgraph.graph import StateGraph, END
+
+logger = logging.getLogger(__name__)
 
 from app.services.supervisor.pipeline_state import PipelineState
 from app.services.supervisor.event_bus import event_bus
@@ -845,9 +848,11 @@ async def routing_node(state: PipelineState) -> dict:
         if escalation_result["decision"] == "HUMAN_AT_CURRENT_TIER":
             from app.services.queue_service import assign_to_queue
 
+            # current_tier may be 0 if complaint came via standard route; enforce >= 1
+            _hat_tier = max(state.get("current_tier") or 1, 1)
             queue_result = assign_to_queue(
                 complaint_id  = complaint_id,
-                tier_level    = state.get("current_tier", 1),
+                tier_level    = _hat_tier,
                 urgency_score = state.get("urgency_score", 5.0),
                 severity      = state.get("severity", 3),
                 severity_score= state.get("severity_score", 5.0),
@@ -859,7 +864,7 @@ async def routing_node(state: PipelineState) -> dict:
                 "event":          "assigned_to_agent",
                 "complaint_id":   complaint_id,
                 "assigned_to":    queue_result.get("assigned_to"),
-                "tier":           state.get("current_tier", 1),
+                "tier":           _hat_tier,
                 "priority":       queue_result.get("priority_score"),
                 "queue_position": queue_result.get("queue_position"),
             })
@@ -885,7 +890,7 @@ async def routing_node(state: PipelineState) -> dict:
 
             esc_orchestrator_result = await execute_escalation(
                 complaint_id=complaint_id,
-                from_tier=state.get("current_tier", 1),
+                from_tier=max(state.get("current_tier") or 1, 1),
                 to_tier=assigned_tier,
                 escalation_reason=escalation_result.get("rule_triggered", "CONFIDENCE_LOW"),
                 original_state=dict(state),
@@ -938,6 +943,37 @@ async def routing_node(state: PipelineState) -> dict:
         assigned_tier = result.get("tier_hint") or 4
         response_tier = "human_review"
 
+        # ── Insert into agent_queue so the complaint appears in Agent Desk ──
+        # This was the missing step — without it tier_pending_at stays null
+        # and the queue API never sees the complaint.
+        try:
+            from app.services.queue_service import assign_to_queue
+            queue_result = assign_to_queue(
+                complaint_id=complaint_id,
+                tier_level=assigned_tier,
+                urgency_score=state.get("urgency_score", 5.0),
+                severity=state.get("severity", 3),
+                severity_score=state.get("severity_score", 5.0),
+                category=state.get("category", "General Banking"),
+                sla_deadline=state.get("rbi_tat_deadline"),
+            )
+            await event_bus.publish(complaint_id, {
+                "event":          "assigned_to_agent",
+                "complaint_id":   complaint_id,
+                "assigned_to":    queue_result.get("assigned_to"),
+                "tier":           assigned_tier,
+                "queue_position": queue_result.get("queue_position"),
+                "route":          "HUMAN",
+                "override":       True,
+            })
+        except Exception as _qe:
+            # Queue insertion failure must not crash the pipeline
+            logger.warning("[ROUTING] HUMAN queue insert failed: %s", _qe)
+
+    # Determine the final tier for the complaint so _save_pipeline_outputs
+    # writes the correct current_tier to the DB (never 0).
+    _final_tier = max(assigned_tier or state.get("current_tier") or 1, 1)
+
     return {
         "route":                      route,
         "risk_score":                 risk_score,
@@ -949,9 +985,10 @@ async def routing_node(state: PipelineState) -> dict:
         "explanation_trace":          [output.model_dump()] + escalation_trace,
         "errors":                     [str(output.error_message)] if output.error_message else [],
         "response_tier":              response_tier,
-        "tier_number":                assigned_tier or 3,
+        "tier_number":                _final_tier,
         "auto_response_result":       auto_response_result,
-        "assigned_tier":              assigned_tier,
+        "assigned_tier":              _final_tier,
+        "current_tier":               _final_tier,
         "escalation_decision":        escalation_decision,
         # Auto-response tracking fields (populated when route == "AUTO" or orchestrator auto-responds)
         "formatted_response":         formatted_response,

@@ -1,28 +1,21 @@
 import { useState, useRef, useCallback } from 'react'
 import {
   Send, Upload, X, FileImage, CheckCircle2, AlertCircle,
-  ChevronRight, Loader2, Bot,
+  ChevronRight, Loader2, Zap,
 } from 'lucide-react'
-import { api, createPipelineStream } from '../../lib/api'
-import { attachPipelineEventSource } from '../../lib/pipelineSse'
-import type { PipelineSSEEvent, TabId } from '../../types'
+import { api } from '../../lib/api'
+import type { TabId } from '../../types'
 
 const CHANNELS = ['Email', 'Phone', 'Web Form', 'Mobile App', 'Social Media']
-
-interface AgentStep {
-  name: string
-  order: number
-  status: 'waiting' | 'processing' | 'complete' | 'failed'
-  decision?: string
-  confidence?: number
-  duration_ms?: number
-}
+const AUTO_MODE_KEY = 'auto_resolution_enabled'
 
 interface Props {
   setActive: (id: TabId) => void
 }
 
-type FlowState = 'form' | 'submitting' | 'pipeline' | 'done' | 'error'
+// 'pending'     → submitted, waiting for staff to manually run the pipeline
+// 'auto_queued' → submitted + pipeline silently fired (Auto Resolution ON)
+type FlowState = 'form' | 'submitting' | 'pending' | 'auto_queued' | 'error'
 
 export function SubmitTab({ setActive }: Props) {
   const [complaintText, setComplaintText] = useState('')
@@ -34,14 +27,8 @@ export function SubmitTab({ setActive }: Props) {
   const [flowState, setFlowState] = useState<FlowState>('form')
   const [complaintId, setComplaintId] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [agentSteps, setAgentSteps] = useState<AgentStep[]>([])
-  const [pipelineResult, setPipelineResult] = useState<{ route?: string; category?: string } | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const esRef = useRef<EventSource | null>(null)
-  const detachSseRef = useRef<(() => void) | null>(null)
-  /** Avoid treating EventSource close-after-success as a hard error */
-  const sseActiveRef = useRef(false)
 
   const handleImageDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -57,85 +44,10 @@ export function SubmitTab({ setActive }: Props) {
 
   const canSubmit = complaintText.trim().length >= 10 && customerId.trim().length >= 2
 
-  const updateAgent = (event: PipelineSSEEvent) => {
-    if (!event.agent || event.order == null) return
-    const rawStatus = String(event.status ?? '').toLowerCase()
-    setAgentSteps((prev) => {
-      const existing = prev.findIndex((a) => a.name === event.agent)
-      const step: AgentStep = {
-        name: event.agent!,
-        order: event.order!,
-        status:
-          rawStatus === 'processing'
-            ? 'processing'
-            : rawStatus === 'complete'
-            ? 'complete'
-            : rawStatus === 'failed'
-            ? 'failed'
-            : 'waiting',
-        decision: event.decision,
-        confidence: event.confidence,
-        duration_ms: event.duration_ms,
-      }
-      if (existing >= 0) {
-        const updated = [...prev]
-        updated[existing] = step
-        return updated
-      }
-      return [...prev, step].sort((a, b) => a.order - b.order)
-    })
-  }
-
-  const startStream = (cid: string) => {
-    detachSseRef.current?.()
-    detachSseRef.current = null
-    esRef.current?.close()
-    sseActiveRef.current = true
-
-    const es = createPipelineStream(cid)
-    esRef.current = es
-
-    detachSseRef.current = attachPipelineEventSource(es, {
-      onAgentUpdate: updateAgent,
-      onPipelineComplete: (d) => {
-        sseActiveRef.current = false
-        setPipelineResult({
-          route: typeof d.route === 'string' ? d.route : undefined,
-          category: typeof d.category === 'string' ? d.category : undefined,
-        })
-        setFlowState('done')
-        detachSseRef.current?.()
-        detachSseRef.current = null
-        es.close()
-      },
-      onPipelineError: (p) => {
-        sseActiveRef.current = false
-        setFlowState('error')
-        setErrorMsg(p.error ?? 'AI analysis encountered an error. Check backend logs.')
-        detachSseRef.current?.()
-        detachSseRef.current = null
-        es.close()
-      },
-      onTransportError: () => {
-        if (!sseActiveRef.current) return
-        sseActiveRef.current = false
-        setFlowState('error')
-        setErrorMsg(
-          'Lost connection to the AI pipeline. Check backend is running, VITE_API_KEY matches API_KEY, and browser Network tab for the stream request.',
-        )
-        detachSseRef.current?.()
-        detachSseRef.current = null
-        es.close()
-      },
-      onLog: (line) => console.info('[Submit pipeline]', line),
-    })
-  }
-
   const handleSubmit = async () => {
     if (!canSubmit) return
     setFlowState('submitting')
     setErrorMsg(null)
-    setAgentSteps([])
 
     const idempotencyKey = crypto.randomUUID()
     const form = new FormData()
@@ -148,12 +60,14 @@ export function SubmitTab({ setActive }: Props) {
       const res = await api.complaints.submit(form, idempotencyKey)
       setComplaintId(res.complaint_id)
 
-      // Trigger pipeline
-      await api.pipeline.run(res.complaint_id)
-
-      // Start SSE stream
-      setFlowState('pipeline')
-      startStream(res.complaint_id)
+      const autoMode = localStorage.getItem(AUTO_MODE_KEY) === 'true'
+      if (autoMode) {
+        // Fire-and-forget: run pipeline silently in backend, no SSE visualization
+        api.pipeline.run(res.complaint_id).catch(console.error)
+        setFlowState('auto_queued')
+      } else {
+        setFlowState('pending')
+      }
     } catch (e) {
       setFlowState('error')
       setErrorMsg(e instanceof Error ? e.message : 'Something went wrong. Please try again.')
@@ -161,18 +75,12 @@ export function SubmitTab({ setActive }: Props) {
   }
 
   const reset = () => {
-    sseActiveRef.current = false
-    detachSseRef.current?.()
-    detachSseRef.current = null
-    esRef.current?.close()
     setFlowState('form')
     setComplaintText('')
     setChannel('Email')
     setCustomerId('')
     setImageFile(null)
     setComplaintId(null)
-    setAgentSteps([])
-    setPipelineResult(null)
     setErrorMsg(null)
   }
 
@@ -191,134 +99,73 @@ export function SubmitTab({ setActive }: Props) {
     )
   }
 
-  if (flowState === 'pipeline' || flowState === 'done') {
-    const processing = agentSteps.filter((s) => s.status === 'processing')
-    const done = agentSteps.filter((s) => s.status === 'complete')
-
+  // ── Pending: submitted, waiting for manual pipeline run ───────────────────
+  if (flowState === 'pending') {
     return (
-      <div className="max-w-2xl mx-auto space-y-4">
-        {/* Header card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-xs text-green-600 font-semibold uppercase tracking-wide">
-                  {flowState === 'done' ? 'Analysis Complete' : 'AI Analysis Running'}
-                </span>
-              </div>
-              <h2 className="text-lg font-bold text-gray-800">Complaint Registered</h2>
-              <p className="text-sm text-gray-500 mt-0.5 font-mono">{complaintId}</p>
-            </div>
-            {flowState === 'done' && (
-              <CheckCircle2 className="w-10 h-10 text-green-500 flex-shrink-0" />
-            )}
-            {flowState === 'pipeline' && (
-              <Loader2 className="w-10 h-10 text-ub-blue animate-spin flex-shrink-0" />
-            )}
+      <div className="max-w-xl mx-auto mt-12">
+        <div className="bg-white border border-green-200 rounded-2xl p-8 text-center shadow-sm">
+          <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-4" />
+          <h2 className="text-lg font-bold text-gray-800 mb-1">Complaint Registered</h2>
+          <p className="text-sm font-mono text-gray-500 mb-3">{complaintId}</p>
+          <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+            The complaint is saved and waiting in <strong>Pending Analysis</strong>.
+            Open the AI Analysis tab, select it, and click <strong>Run AI Analysis</strong> when ready.
+          </p>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => setActive('pipeline' as TabId)}
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-md bg-ub-blue text-white text-sm font-semibold hover:opacity-90"
+            >
+              Go to AI Analysis <ChevronRight size={14} />
+            </button>
+            <button
+              onClick={reset}
+              className="px-4 py-2.5 rounded-md border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Submit New
+            </button>
           </div>
         </div>
+      </div>
+    )
+  }
 
-        {/* Agent progress */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <Bot size={16} className="text-ub-blue" />
-            <span className="text-sm font-bold text-gray-700">AI Agents Working</span>
-            {flowState === 'pipeline' && (
-              <span className="text-xs text-gray-400 ml-auto">{done.length} of {agentSteps.length} complete</span>
-            )}
-          </div>
-
-          {agentSteps.length === 0 && flowState === 'pipeline' && (
-            <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
-              <Loader2 size={14} className="animate-spin" /> Starting AI agents…
+  // ── Auto-queued: submitted + pipeline silently running ────────────────────
+  if (flowState === 'auto_queued') {
+    return (
+      <div className="max-w-xl mx-auto mt-12">
+        <div className="bg-white border border-green-200 rounded-2xl p-8 text-center shadow-sm">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <CheckCircle2 className="w-10 h-10 text-green-500" />
+            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+              <Zap size={16} className="text-green-700" />
             </div>
-          )}
-
-          <div className="space-y-2">
-            {agentSteps.map((step) => (
-              <div
-                key={step.name}
-                className={`rounded-xl p-3 border transition-all ${
-                  step.status === 'complete'
-                    ? 'border-green-200 bg-green-50'
-                    : step.status === 'processing'
-                    ? 'border-blue-200 bg-blue-50'
-                    : step.status === 'failed'
-                    ? 'border-red-200 bg-red-50'
-                    : 'border-gray-100 bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {step.status === 'complete' && <CheckCircle2 size={14} className="text-green-600 flex-shrink-0" />}
-                    {step.status === 'processing' && <Loader2 size={14} className="animate-spin text-blue-600 flex-shrink-0" />}
-                    {step.status === 'failed' && <AlertCircle size={14} className="text-red-500 flex-shrink-0" />}
-                    {step.status === 'waiting' && <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 flex-shrink-0" />}
-                    <span className="text-xs font-semibold text-gray-700 truncate">{step.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {step.confidence !== undefined && (
-                      <span className="text-xs text-gray-400">{Math.round(step.confidence * 100)}% confident</span>
-                    )}
-                    {step.duration_ms && (
-                      <span className="text-xs text-gray-400">{step.duration_ms}ms</span>
-                    )}
-                    {step.status === 'processing' && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Processing…</span>
-                    )}
-                  </div>
-                </div>
-                {step.decision && step.status === 'complete' && (
-                  <p className="text-xs text-gray-600 mt-1.5 ml-5">
-                    Result: <span className="font-semibold text-gray-800">{step.decision}</span>
-                  </p>
-                )}
-              </div>
-            ))}
+          </div>
+          <h2 className="text-lg font-bold text-gray-800 mb-1">Complaint Registered</h2>
+          <p className="text-sm font-mono text-gray-500 mb-3">{complaintId}</p>
+          <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mb-6 text-left">
+            <p className="text-xs font-semibold text-green-700 mb-0.5 flex items-center gap-1.5">
+              <Zap size={11} /> Auto Resolution is ON
+            </p>
+            <p className="text-xs text-green-700 leading-relaxed">
+              The AI pipeline is running silently in the background. Results will appear in the Complaints tab once complete.
+            </p>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <button
+              onClick={() => setActive('complaints' as TabId)}
+              className="flex items-center gap-1.5 px-5 py-2.5 rounded-md bg-ub-blue text-white text-sm font-semibold hover:opacity-90"
+            >
+              View Complaints <ChevronRight size={14} />
+            </button>
+            <button
+              onClick={reset}
+              className="px-4 py-2.5 rounded-md border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Submit New
+            </button>
           </div>
         </div>
-
-        {/* Final result */}
-        {flowState === 'done' && pipelineResult && (
-          <div className="bg-white rounded-2xl shadow-sm border border-green-200 p-5">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">Analysis Summary</h3>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              {pipelineResult.category && (
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <div className="text-xs text-gray-400 mb-0.5">Category</div>
-                  <div className="font-semibold text-gray-800">{pipelineResult.category}</div>
-                </div>
-              )}
-              {pipelineResult.route && (
-                  <div className={`rounded-lg p-3 ${pipelineResult.route === 'auto_respond' ? 'bg-slate-50 border border-slate-200' : 'bg-ub-blue-light/50 border border-slate-200'}`}>
-                  <div className="text-xs text-slate-500 mb-0.5">Next step</div>
-                  <div className={`font-semibold ${pipelineResult.route === 'auto_respond' ? 'text-slate-800' : 'text-ub-blue'}`}>
-                  {pipelineResult.route === 'auto_respond' ? 'Automated reply sent' : 'Queued for officer review'}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => { setActive('complaints') }}
-                className="flex-1 py-2.5 rounded-md bg-ub-blue text-white text-sm font-semibold hover:opacity-90 flex items-center justify-center gap-1.5"
-              >
-                View in Complaints <ChevronRight size={14} />
-              </button>
-              <button
-                onClick={reset}
-                className="px-4 py-2.5 rounded-md border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
-              >
-                Submit New
-              </button>
-            </div>
-          </div>
-        )}
-
-        {processing.length === 0 && flowState === 'pipeline' && agentSteps.length > 0 && (
-          <p className="text-xs text-center text-gray-400">Waiting for next agent…</p>
-        )}
       </div>
     )
   }
@@ -329,7 +176,7 @@ export function SubmitTab({ setActive }: Props) {
       <div className="rounded-2xl p-5 text-white bg-ub-blue border border-white/10 shadow-glass">
         <h1 className="text-lg font-bold mb-1">Register New Complaint</h1>
         <p className="text-blue-200 text-sm">
-          Fill in the customer details below. Our AI will automatically analyse and route the complaint.
+          Fill in the customer details below. The complaint is saved first; run the AI pipeline from the Analysis tab, or enable Auto Resolution for hands-free processing.
         </p>
       </div>
 
@@ -445,12 +292,12 @@ export function SubmitTab({ setActive }: Props) {
           {flowState === 'submitting' ? (
             <>
               <Loader2 size={16} className="animate-spin" />
-              Submitting & Starting AI Analysis…
+              Submitting…
             </>
           ) : (
             <>
               <Send size={16} />
-              Submit &amp; Run AI Analysis
+              Submit Complaint
             </>
           )}
         </button>
@@ -461,11 +308,11 @@ export function SubmitTab({ setActive }: Props) {
         <p className="text-xs font-semibold text-ub-blue mb-2">What happens after you submit?</p>
         <div className="space-y-1.5">
           {[
-            'Complaint is registered instantly with a unique ID',
-            'AI checks for sensitive information and protects customer privacy',
-            'Multiple AI agents classify, analyse sentiment, and check compliance',
-            'A draft response is generated automatically',
-            'Complaint is routed — auto-sent or sent to you for review',
+            'Complaint is registered instantly with a unique ID and saved as Pending',
+            'It appears in the AI Analysis tab under "Pending Analysis"',
+            'A staff member selects it and clicks Run AI Analysis — or enable Auto Resolution for hands-free processing',
+            'AI checks PII, classifies, analyses sentiment, checks RBI compliance, and generates a draft',
+            'Complaint is routed — auto-sent if confidence is high, or queued for officer review',
           ].map((step, i) => (
             <div key={i} className="flex items-start gap-2 text-xs text-gray-600">
               <span className="w-4 h-4 rounded-full bg-ub-blue text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">

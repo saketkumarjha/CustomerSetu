@@ -5,7 +5,6 @@ import {
   Cpu,
   TrendingUp,
   X,
-  PlusCircle,
   Shield,
   Clock,
   BookOpen,
@@ -14,6 +13,7 @@ import {
   Activity,
   Users,
   AlertTriangle,
+  UserCircle2,
 } from "lucide-react";
 import type { TabId } from "../../types";
 
@@ -39,13 +39,8 @@ const TABS: NavItem[] = [
     icon: <ClipboardList size={16} />,
     label: "All Complaints",
   },
-  {
-    id: "submit",
-    icon: <PlusCircle size={16} />,
-    label: "New Complaint",
-    badge: "NEW",
-  },
   { id: "pipeline", icon: <Cpu size={16} />, label: "AI Pipeline" },
+  { id: "agent", icon: <UserCircle2 size={16} />, label: "Agent Desk" },
   {
     id: "analytics",
     icon: <TrendingUp size={16} />,

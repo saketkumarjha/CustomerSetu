@@ -216,11 +216,39 @@ export interface AgentComplaintContext {
     current_tier?: number;
     status?: string;
   };
+  ai_analysis?: {
+    classification?: { category?: string; confidence?: number };
+    sentiment?: { emotion?: string; urgency_score?: number; escalation_flag?: boolean };
+    severity?: { level?: number; score?: number; breakdown?: unknown };
+    rbi_compliance?: {
+      compliance_category?: string;
+      is_rbi_reportable?: boolean;
+      tat_deadline?: string | null;
+    };
+  };
   draft_response?: {
     text?: string | null;
     confidence?: number;
+    can_be_accepted?: boolean;
+    root_cause?: string;
+    action_steps?: string[];
+    grounding_warnings?: unknown[];
+    confidence_breakdown?: Record<string, number>;
+  };
+  escalation_analysis?: {
+    should_escalate?: boolean;
+    reasoning?: string;
+    signals_detected?: unknown[];
   };
   suggested_actions?: string[];
+  knowledge_references?: Array<{
+    category?: string;
+    similarity?: number;
+    resolution_text?: string;
+  }>;
+  customer_history?: Record<string, unknown>;
+  timeline?: Array<{ event: string; timestamp?: string | null }>;
+  agent_decisions_trace?: Array<{ agent?: string; decision?: string; confidence?: number }>;
   note?: string;
 }
 
@@ -313,6 +341,10 @@ export const api = {
       ),
     nextComplaint: (body: { agent_id: string; tier_level: number }) =>
       apiPost<NextComplaintResponse>("/api/v1/agent/next-complaint", body),
+    recoverStuck: (tierLevel: number) =>
+      apiPost<{ recovered: number; total_stuck: number; message: string }>(
+        `/api/v1/agent/recover-stuck-complaints?tier_level=${tierLevel}`,
+      ),
     metrics: (agentId: string, dateFrom?: string, dateTo?: string) => {
       const qs = new URLSearchParams();
       if (dateFrom) qs.set("date_from", dateFrom);
@@ -568,6 +600,8 @@ export interface DashboardStats {
     rbi_reportable_rate_percent: number;
     closed: number;
     open: number;
+    duplicate_count: number;
+    auto_sent_count: number;
   };
   averages: {
     avg_severity: number;
@@ -584,6 +618,12 @@ export interface DashboardStats {
       percent: number;
     }>;
     by_channel: Array<{ channel: string; count: number; percent: number }>;
+    by_tier: Array<{
+      tier: number;
+      label: string;
+      count: number;
+      percent: number;
+    }>;
   };
   daily_volume: Array<{ date: string; count: number }>;
 }

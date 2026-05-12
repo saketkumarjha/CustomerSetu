@@ -1,23 +1,34 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from "react";
 import {
-  X, User, MessageCircle, Copy, Shield, Send,
-  RotateCcw, ArrowUpCircle, Loader2, Bot, Clock, CheckCircle2, Play,
-} from 'lucide-react'
-import type { Complaint } from '../../../types'
-import type { ApiComplaint, AgentDecision, GroundingWarningItem } from '../../../lib/api'
-import { SeverityBadge } from '../../ui/SeverityBadge'
-import { ChannelBadge } from '../../ui/ChannelBadge'
-import { SlaBadge } from '../../ui/SlaBadge'
-import { getInitials, getActorColor } from '../../../utils/styles'
-import { api } from '../../../lib/api'
-import { EscalationStatusSection } from './EscalationStatusSection'
-import { ShadowOverrideSection } from './ShadowOverrideSection'
+  X,
+  User,
+  MessageCircle,
+  Copy,
+  Shield,
+  Loader2,
+  Bot,
+  Clock,
+  CheckCircle2,
+} from "lucide-react";
+import type { Complaint } from "../../../types";
+import type {
+  ApiComplaint,
+  AgentDecision,
+  GroundingWarningItem,
+} from "../../../lib/api";
+import { SeverityBadge } from "../../ui/SeverityBadge";
+import { ChannelBadge } from "../../ui/ChannelBadge";
+import { SlaBadge } from "../../ui/SlaBadge";
+import { getInitials, getActorColor } from "../../../utils/styles";
+import { api } from "../../../lib/api";
+import { EscalationStatusSection } from "./EscalationStatusSection";
+import { ShadowOverrideSection } from "./ShadowOverrideSection";
 
 function GroundingWarningRow({ w }: { w: string | GroundingWarningItem }) {
-  if (typeof w === 'string') {
-    return <li className="text-slate-600">{w}</li>
+  if (typeof w === "string") {
+    return <li className="text-slate-600">{w}</li>;
   }
-  const title = [w.type, w.claim].filter(Boolean).join(' — ')
+  const title = [w.type, w.claim].filter(Boolean).join(" — ");
   return (
     <li className="text-slate-600 border-l-2 border-amber-400/70 pl-2 py-1.5 space-y-0.5">
       {title && <div className="font-medium text-slate-800">{title}</div>}
@@ -34,18 +45,76 @@ function GroundingWarningRow({ w }: { w: string | GroundingWarningItem }) {
         </div>
       )}
     </li>
-  )
+  );
+}
+
+/** Route/status pill — maps backend values to a human-readable label */
+function RouteStatusPill({
+  route,
+  status,
+}: {
+  route?: string | null;
+  status?: string | null;
+}) {
+  const r = (route ?? "").toLowerCase();
+  const s = (status ?? "").toLowerCase();
+
+  if (
+    r === "auto_respond" ||
+    s === "auto_respond" ||
+    s === "resolved" ||
+    s === "awaiting_feedback"
+  ) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        Auto Sent
+      </span>
+    );
+  }
+  if (r === "human_review" || s === "human_review") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        Human Review
+      </span>
+    );
+  }
+  if (r === "escalate" || r === "escalated" || s === "escalated") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+        Escalated
+      </span>
+    );
+  }
+  if (s === "shadow_sent") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+        Shadow Sent
+      </span>
+    );
+  }
+  if (s === "processing") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+        Processing
+      </span>
+    );
+  }
+  return null;
 }
 
 interface Props {
-  complaint: Complaint
-  onClose: () => void
-  loadingDetail?: boolean
-  apiDetail?: ApiComplaint | null
-  pipelineAvailable?: boolean
-  onAfterRunPipeline?: () => void
-  /** Refetch complaint row after shadow override or other updates */
-  onComplaintUpdated?: () => void
+  complaint: Complaint;
+  onClose: () => void;
+  loadingDetail?: boolean;
+  apiDetail?: ApiComplaint | null;
+  pipelineAvailable?: boolean;
+  onAfterRunPipeline?: () => void;
+  onComplaintUpdated?: () => void;
 }
 
 export function ComplaintDetailPanel({
@@ -53,108 +122,50 @@ export function ComplaintDetailPanel({
   onClose,
   loadingDetail,
   apiDetail,
-  pipelineAvailable = false,
-  onAfterRunPipeline,
+  pipelineAvailable: _pipelineAvailable = false,
+  onAfterRunPipeline: _onAfterRunPipeline,
   onComplaintUpdated,
 }: Props) {
-  const [draft, setDraft] = useState(complaint.agentResult.resolution)
-  const [sent, setSent] = useState(false)
-  const [submittingFeedback, setSubmittingFeedback] = useState(false)
-  const [feedbackDone, setFeedbackDone] = useState<'accepted' | 'rejected' | null>(null)
-  const [agentDecisions, setAgentDecisions] = useState<AgentDecision[]>([])
-  const [loadingExplanation, setLoadingExplanation] = useState(false)
-  const [pipelineRunLoading, setPipelineRunLoading] = useState(false)
-  const [pipelineRunError, setPipelineRunError] = useState<string | null>(null)
+  const [agentDecisions, setAgentDecisions] = useState<AgentDecision[]>([]);
+  const [loadingExplanation, setLoadingExplanation] = useState(false);
 
   useEffect(() => {
-    setDraft(complaint.agentResult.resolution !== '—' ? complaint.agentResult.resolution : '')
-    setSent(false)
-    setFeedbackDone(null)
-    setAgentDecisions([])
-    setPipelineRunError(null)
-  }, [complaint.id, complaint.agentResult.resolution])
+    setAgentDecisions([]);
+  }, [complaint.id]);
 
-  // Load explanation trace when an API complaint is selected and has been through pipeline
   useEffect(() => {
-    if (!apiDetail || apiDetail.pipeline_status !== 'complete') return
-    setLoadingExplanation(true)
-    api.complaints.explanation(apiDetail.complaint_id)
+    if (!apiDetail || apiDetail.pipeline_status !== "complete") return;
+    setLoadingExplanation(true);
+    api.complaints
+      .explanation(apiDetail.complaint_id)
       .then((r) => setAgentDecisions(r.explanation_trace))
       .catch(() => {})
-      .finally(() => setLoadingExplanation(false))
-  }, [apiDetail?.complaint_id, apiDetail?.pipeline_status])
+      .finally(() => setLoadingExplanation(false));
+  }, [apiDetail?.complaint_id, apiDetail?.pipeline_status]);
 
-  const r = complaint.agentResult
-
-  const handleApprove = async () => {
-    if (!apiDetail) { setSent(true); return }
-    setSubmittingFeedback(true)
-    try {
-      await api.feedback.submitAgent({
-        complaint_id: apiDetail.complaint_id,
-        agent_id: 'RM',
-        action: draft === apiDetail.draft_response ? 'accept' : 'edit',
-        original_draft: apiDetail.draft_response ?? '',
-        final_response: draft,
-      })
-      setFeedbackDone('accepted')
-      setSent(true)
-    } catch {
-      setSent(true)
-    } finally {
-      setSubmittingFeedback(false)
-    }
-  }
-
-  const handleReject = async () => {
-    if (!apiDetail) return
-    setSubmittingFeedback(true)
-    try {
-      await api.feedback.submitAgent({
-        complaint_id: apiDetail.complaint_id,
-        agent_id: 'RM',
-        action: 'reject',
-        original_draft: apiDetail.draft_response ?? '',
-        rejection_reason: 'Officer rejected draft — needs manual response',
-      })
-      setFeedbackDone('rejected')
-    } catch { /* ignore */ }
-    finally { setSubmittingFeedback(false) }
-  }
-
-  const handleRunPipeline = async () => {
-    if (!pipelineAvailable) return
-    setPipelineRunError(null)
-    setPipelineRunLoading(true)
-    try {
-      await api.pipeline.run(complaint.id)
-      onAfterRunPipeline?.()
-    } catch (e) {
-      setPipelineRunError(e instanceof Error ? e.message : 'Could not start the pipeline')
-    } finally {
-      setPipelineRunLoading(false)
-    }
-  }
+  const r = complaint.agentResult;
+  const draft = r.resolution && r.resolution !== "—" ? r.resolution : null;
 
   return (
     <div className="w-full lg:w-[460px] lg:min-w-[460px] flex flex-col bg-white lg:border-l border-gray-200 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 bg-ub-blue flex-shrink-0">
         <div>
-          <div className="text-white font-bold text-sm font-mono">{complaint.id}</div>
+          <div className="text-white font-bold text-sm font-mono">
+            {complaint.id}
+          </div>
           <div className="text-blue-200/90 text-xs">Complaint detail</div>
         </div>
         <div className="flex items-center gap-2">
-          {loadingDetail && <Loader2 size={14} className="text-blue-200 animate-spin" />}
-          {apiDetail?.status === 'shadow_sent' && (
-            <span className="text-xs bg-amber-500/25 text-amber-50 px-2 py-0.5 rounded-md border border-amber-300/40">
-              Shadow sent — correction window
-            </span>
+          {loadingDetail && (
+            <Loader2 size={14} className="text-blue-200 animate-spin" />
           )}
-          {apiDetail?.pipeline_status === 'complete' && apiDetail?.status !== 'shadow_sent' && (
-            <span className="text-xs bg-white/15 text-white px-2 py-0.5 rounded-md border border-white/20">
-              Analysis complete
-            </span>
+          {/* Route/status pill in header */}
+          {apiDetail && (
+            <RouteStatusPill
+              route={apiDetail.route}
+              status={apiDetail.status}
+            />
           )}
           <button
             onClick={onClose}
@@ -167,7 +178,6 @@ export function ComplaintDetailPanel({
 
       {/* Body */}
       <div className="overflow-y-auto flex-1 p-4 space-y-4">
-
         {/* Customer info */}
         <section className="rounded-xl p-3 border border-slate-200/90 bg-white/70 backdrop-blur-sm">
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-1.5">
@@ -178,11 +188,17 @@ export function ComplaintDetailPanel({
               {getInitials(complaint.customer)}
             </div>
             <div>
-              <div className="font-semibold text-sm text-gray-800">{complaint.customer}</div>
-              {complaint.accountNo !== '—' && (
-                <div className="text-xs text-gray-500">{complaint.accountNo} · {complaint.branch}</div>
+              <div className="font-semibold text-sm text-gray-800">
+                {complaint.customer}
+              </div>
+              {complaint.accountNo !== "—" && (
+                <div className="text-xs text-gray-500">
+                  {complaint.accountNo} · {complaint.branch}
+                </div>
               )}
-              {complaint.phone !== '—' && <div className="text-xs text-gray-400">{complaint.phone}</div>}
+              {complaint.phone !== "—" && (
+                <div className="text-xs text-gray-400">{complaint.phone}</div>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-3 text-xs">
@@ -190,55 +206,79 @@ export function ComplaintDetailPanel({
               <span className="text-gray-400">Channel: </span>
               <ChannelBadge channel={complaint.channel} />
             </div>
-            <div><span className="text-gray-400">Date: </span><span className="font-medium">{complaint.date}</span></div>
+            <div>
+              <span className="text-gray-400">Date: </span>
+              <span className="font-medium">{complaint.date}</span>
+            </div>
             <div className="flex items-center gap-1.5">
               <span className="text-gray-400">Severity: </span>
               <SeverityBadge severity={complaint.severity} />
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-gray-400">SLA: </span>
-              <SlaBadge breached={complaint.slaBreached} label={complaint.slaRemaining} />
+              <SlaBadge
+                breached={complaint.slaBreached}
+                label={complaint.slaRemaining}
+              />
             </div>
           </div>
         </section>
 
         {/* Complaint text */}
         <section>
-          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Complaint Description</div>
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+            Complaint Description
+          </div>
           <p className="text-xs text-gray-700 leading-relaxed bg-gray-50 rounded-xl p-3 border border-gray-100">
-            {complaint.description}
+            {complaint.description && complaint.description !== "—" ? (
+              complaint.description
+            ) : (
+              <span className="text-slate-300 italic">
+                No description available
+              </span>
+            )}
           </p>
-          {apiDetail?.language && apiDetail.language !== 'en' && (
+          {apiDetail?.language && apiDetail.language !== "en" && (
             <p className="text-xs text-slate-600 mt-1 bg-slate-50 px-2 py-1 rounded-md border border-slate-200/80">
-              Language: <strong>{apiDetail.language.toUpperCase()}</strong> (translated automatically)
+              Language: <strong>{apiDetail.language.toUpperCase()}</strong>{" "}
+              (translated automatically)
             </p>
           )}
         </section>
 
-        {/* Shadow auto-send: human correction within deadline (only when API exposes this state) */}
+        {/* Shadow override section */}
         {apiDetail &&
-          (apiDetail.status === 'shadow_sent' ||
-            apiDetail.status === 'override_closed' ||
+          (apiDetail.status === "shadow_sent" ||
+            apiDetail.status === "override_closed" ||
             apiDetail.shadow_overridden) && (
-            <ShadowOverrideSection apiDetail={apiDetail} onApplied={() => onComplaintUpdated?.()} />
+            <ShadowOverrideSection
+              apiDetail={apiDetail}
+              onApplied={() => onComplaintUpdated?.()}
+            />
           )}
 
-        {/* AI analysis — use explanation_trace if available, else use agentResult */}
+        {/* AI Analysis */}
         <section>
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
             <Bot size={11} /> Analysis
-            {loadingExplanation && <Loader2 size={10} className="animate-spin text-gray-400" />}
+            {loadingExplanation && (
+              <Loader2 size={10} className="animate-spin text-gray-400" />
+            )}
           </div>
 
-          {/* Live explanation trace from backend */}
           {agentDecisions.length > 0 ? (
             <div className="space-y-2">
               {agentDecisions.map((d) => (
-                <div key={d.agent_name} className={`rounded-md p-3 border text-xs ${
-                  d.status === 'complete' ? 'border-slate-200 bg-white/80'
-                  : d.status === 'failed' ? 'border-ub-red/30 bg-ub-red/5'
-                  : 'border-slate-200 bg-slate-50/80'
-                }`}>
+                <div
+                  key={d.agent_name}
+                  className={`rounded-md p-3 border text-xs ${
+                    d.status === "complete"
+                      ? "border-slate-200 bg-white/80"
+                      : d.status === "failed"
+                        ? "border-ub-red/30 bg-ub-red/5"
+                        : "border-slate-200 bg-slate-50/80"
+                  }`}
+                >
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="font-semibold text-slate-800 flex items-center gap-1">
                       <CheckCircle2 size={10} className="text-slate-500" />
@@ -246,7 +286,9 @@ export function ComplaintDetailPanel({
                     </span>
                     <div className="flex items-center gap-2">
                       {d.confidence !== undefined && (
-                        <span className="text-slate-500">{Math.round(d.confidence * 100)}% confidence</span>
+                        <span className="text-slate-500">
+                          {Math.round(d.confidence * 100)}% confidence
+                        </span>
                       )}
                       {d.duration_ms && (
                         <span className="text-gray-400 flex items-center gap-0.5">
@@ -259,12 +301,17 @@ export function ComplaintDetailPanel({
                     <p className="text-gray-800 font-medium">{d.decision}</p>
                   )}
                   {d.reasoning && (
-                    <p className="text-gray-500 mt-1 leading-relaxed">{d.reasoning}</p>
+                    <p className="text-gray-500 mt-1 leading-relaxed">
+                      {d.reasoning}
+                    </p>
                   )}
                   {d.evidence && d.evidence.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {d.evidence.map((ev) => (
-                        <span key={ev} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md text-xs border border-slate-200/80">
+                        <span
+                          key={ev}
+                          className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded-md text-xs border border-slate-200/80"
+                        >
                           {ev}
                         </span>
                       ))}
@@ -274,20 +321,34 @@ export function ComplaintDetailPanel({
               ))}
             </div>
           ) : (
-            /* Fallback: render from agentResult */
             <div className="space-y-2">
               {/* Classification */}
               <div className="rounded-md p-3 border border-slate-200 bg-white/80">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-semibold text-slate-800">Classification</span>
+                  <span className="text-xs font-semibold text-slate-800">
+                    Classification
+                  </span>
                   <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200/80">
                     {r.classification.confidence}% confidence
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                  <div><span className="text-gray-400">Category: </span><span className="font-medium">{r.classification.category}</span></div>
-                  <div><span className="text-gray-400">Product: </span><span className="font-medium">{r.classification.product}</span></div>
-                  <div className="col-span-2"><span className="text-gray-400">Type: </span><span className="font-medium">{r.classification.type}</span></div>
+                  <div>
+                    <span className="text-gray-400">Category: </span>
+                    <span className="font-medium">
+                      {r.classification.category}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Product: </span>
+                    <span className="font-medium">
+                      {r.classification.product}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-gray-400">Type: </span>
+                    <span className="font-medium">{r.classification.type}</span>
+                  </div>
                 </div>
               </div>
 
@@ -308,11 +369,16 @@ export function ComplaintDetailPanel({
                       {r.sentiment.emotion}
                     </span>
                   </div>
-                  <div><span className="text-slate-500">Urgency: </span><span className="font-medium text-slate-800">{r.sentiment.urgency}%</span></div>
+                  <div>
+                    <span className="text-slate-500">Urgency: </span>
+                    <span className="font-medium text-slate-800">
+                      {r.sentiment.urgency}%
+                    </span>
+                  </div>
                   <div>
                     <span className="text-slate-500">Escalate: </span>
                     <span className="font-medium text-slate-800">
-                      {r.sentiment.escalate ? 'Yes' : 'No'}
+                      {r.sentiment.escalate ? "Yes" : "No"}
                     </span>
                   </div>
                 </div>
@@ -330,26 +396,41 @@ export function ComplaintDetailPanel({
                 </div>
                 <div className="text-xs">
                   {r.duplicate.isDuplicate ? (
-                    <span className="text-ub-red font-medium">Possible duplicate — {r.duplicate.similar} similar case(s)</span>
+                    <span className="text-ub-red font-medium">
+                      Possible duplicate — {r.duplicate.similar} similar case(s)
+                    </span>
                   ) : r.duplicate.similar > 0 ? (
-                    <span className="text-slate-700 font-medium">{r.duplicate.similar} related case(s), not marked duplicate</span>
+                    <span className="text-slate-700 font-medium">
+                      {r.duplicate.similar} related case(s), not marked
+                      duplicate
+                    </span>
                   ) : (
-                    <span className="text-slate-700 font-medium">No duplicate match</span>
+                    <span className="text-slate-700 font-medium">
+                      No duplicate match
+                    </span>
                   )}
                 </div>
               </div>
 
               {/* Compliance */}
-              <div className={`rounded-md p-3 border ${r.compliance.flagged ? 'border-ub-red/25 bg-ub-red/5' : 'border-slate-200 bg-white/80'}`}>
+              <div
+                className={`rounded-md p-3 border ${r.compliance.flagged ? "border-ub-red/25 bg-ub-red/5" : "border-slate-200 bg-white/80"}`}
+              >
                 <div className="flex justify-between items-center mb-1.5">
-                  <span className={`text-xs font-semibold flex items-center gap-1 ${r.compliance.flagged ? 'text-ub-red' : 'text-slate-800'}`}>
+                  <span
+                    className={`text-xs font-semibold flex items-center gap-1 ${r.compliance.flagged ? "text-ub-red" : "text-slate-800"}`}
+                  >
                     <Shield size={11} /> Compliance
                   </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-md border ${r.compliance.flagged ? 'bg-white border-ub-red/20 text-ub-red' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-md border ${r.compliance.flagged ? "bg-white border-ub-red/20 text-ub-red" : "bg-slate-100 border-slate-200 text-slate-600"}`}
+                  >
                     {r.compliance.confidence}% confidence
                   </span>
                 </div>
-                <div className={`text-xs font-medium ${r.compliance.flagged ? 'text-ub-red' : 'text-slate-700'}`}>
+                <div
+                  className={`text-xs font-medium ${r.compliance.flagged ? "text-ub-red" : "text-slate-700"}`}
+                >
                   Risk: {r.compliance.risk} — {r.compliance.reason}
                 </div>
               </div>
@@ -357,30 +438,41 @@ export function ComplaintDetailPanel({
           )}
         </section>
 
-        {/* Tier routing snapshot (live API only) */}
-        <EscalationStatusSection complaintId={apiDetail?.complaint_id} enabled={!!apiDetail} />
+        {/* Tier routing snapshot */}
+        <EscalationStatusSection
+          complaintId={apiDetail?.complaint_id}
+          enabled={!!apiDetail}
+        />
 
         {/* Grounding info */}
         {apiDetail?.grounding_score !== undefined && (
           <section className="rounded-md p-3 border border-slate-200 bg-slate-50/80 text-xs text-slate-700">
-            <div className="font-semibold text-slate-800 mb-1">Source check</div>
-            <div>
-              Match score: <span className="font-semibold text-ub-blue">{Math.round(apiDetail.grounding_score * 100)}%</span>
+            <div className="font-semibold text-slate-800 mb-1">
+              Source check
             </div>
-            {apiDetail.grounding_warnings && apiDetail.grounding_warnings.length > 0 && (
-              <ul className="mt-1.5 space-y-1">
-                {apiDetail.grounding_warnings.map((w, i) => (
-                  <GroundingWarningRow key={i} w={w} />
-                ))}
-              </ul>
-            )}
+            <div>
+              Match score:{" "}
+              <span className="font-semibold text-ub-blue">
+                {Math.round(apiDetail.grounding_score * 100)}%
+              </span>
+            </div>
+            {apiDetail.grounding_warnings &&
+              apiDetail.grounding_warnings.length > 0 && (
+                <ul className="mt-1.5 space-y-1">
+                  {apiDetail.grounding_warnings.map((w, i) => (
+                    <GroundingWarningRow key={i} w={w} />
+                  ))}
+                </ul>
+              )}
           </section>
         )}
 
         {/* Communication history */}
         {complaint.history.length > 0 && (
           <section>
-            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Timeline</div>
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+              Timeline
+            </div>
             <div className="relative pl-5">
               <div className="absolute left-2 top-1 bottom-1 w-px bg-gray-200" />
               {complaint.history.map((h, i) => (
@@ -390,106 +482,55 @@ export function ComplaintDetailPanel({
                     style={{ backgroundColor: getActorColor(h.actor) }}
                   />
                   <div className="text-xs">
-                    <span className="font-semibold text-gray-700">{h.actor}</span>
+                    <span className="font-semibold text-gray-700">
+                      {h.actor}
+                    </span>
                     <span className="text-gray-400 ml-2">{h.time}</span>
                   </div>
-                  <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">{h.action}</div>
+                  <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    {h.action}
+                  </div>
                 </div>
               ))}
             </div>
           </section>
         )}
 
-        {/* AI Draft Response — hidden while shadow_sent (correction happens in Shadow section above) */}
-        {(complaint.agentResult.resolution && complaint.agentResult.resolution !== '—') &&
-          apiDetail?.status !== 'shadow_sent' && (
+        {/* AI Draft Response — read-only, no action buttons */}
+        {draft && apiDetail?.status !== "shadow_sent" && (
           <section>
             <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">AI Draft Response</div>
-              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md border border-slate-200/80 font-medium">Suggested reply</span>
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                AI Draft Response
+              </div>
+              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md border border-slate-200/80 font-medium flex items-center gap-1">
+                Read-only · use Agent Desk to act
+              </span>
             </div>
-
-            {sent ? (
-              <div className="rounded-md p-4 bg-slate-50 border border-slate-200 text-slate-800 text-sm font-medium text-center">
-                {feedbackDone === 'accepted' ? 'Approved and sent.' : 'Sent successfully.'}
-              </div>
-            ) : feedbackDone === 'rejected' ? (
-              <div className="rounded-md p-4 bg-amber-50 border border-amber-200/80 text-amber-900 text-sm font-medium text-center">
-                Draft declined. Please reply manually.
-              </div>
-            ) : (
-              <>
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  rows={9}
-                  className="w-full text-xs text-gray-700 border border-gray-200 rounded-md p-3 resize-none focus:outline-none focus:border-ub-blue leading-relaxed"
-                  placeholder="AI draft will appear here after pipeline runs…"
-                />
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={handleApprove}
-                    disabled={submittingFeedback || !draft}
-                    className="flex-1 py-2 rounded-md text-xs font-semibold text-white bg-ub-blue hover:opacity-90 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  >
-                    {submittingFeedback ? <Loader2 size={11} className="animate-spin" /> : <Send size={11} />}
-                    Approve &amp; Send
-                  </button>
-                  <button
-                    onClick={() => setDraft(complaint.agentResult.resolution)}
-                    className="px-3 py-2 rounded-md text-xs font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors"
-                    title="Reset to AI draft"
-                  >
-                    <RotateCcw size={13} />
-                  </button>
-                  <button
-                    onClick={handleReject}
-                    disabled={submittingFeedback}
-                    className="px-3 py-2 rounded-md text-xs font-semibold text-white bg-ub-red hover:opacity-90 transition-opacity flex items-center gap-1.5 disabled:opacity-60"
-                  >
-                    <ArrowUpCircle size={11} /> Escalate
-                  </button>
+            <div className="w-full text-xs text-gray-700 border border-gray-200 rounded-xl p-3 leading-relaxed bg-slate-50/60 whitespace-pre-wrap select-text">
+              {draft}
+            </div>
+            {apiDetail?.confidence_score != null && (
+              <div className="flex items-center gap-2 mt-2 text-xs text-slate-500">
+                <span>Confidence:</span>
+                <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[120px]">
+                  <div
+                    className={`h-full rounded-full ${apiDetail.confidence_score >= 0.8 ? "bg-emerald-500" : apiDetail.confidence_score >= 0.6 ? "bg-amber-400" : "bg-red-400"}`}
+                    style={{
+                      width: `${Math.round(apiDetail.confidence_score * 100)}%`,
+                    }}
+                  />
                 </div>
-                <p className="text-xs text-gray-400 mt-2 text-center">
-                  Feedback improves future suggestions.
-                </p>
-              </>
+                <span
+                  className={`font-semibold ${apiDetail.confidence_score >= 0.8 ? "text-emerald-600" : apiDetail.confidence_score >= 0.6 ? "text-amber-600" : "text-red-500"}`}
+                >
+                  {Math.round(apiDetail.confidence_score * 100)}%
+                </span>
+              </div>
             )}
           </section>
         )}
-
-        {/* Run AI pipeline — end of detail panel */}
-        <section className="rounded-xl border border-slate-200 bg-slate-50/90 p-4 mt-1">
-          <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">AI pipeline</div>
-          <p className="text-xs text-slate-500 mb-3 leading-relaxed">
-            Run the full multi-agent analysis on this complaint. Progress streams on the AI Pipeline tab.
-          </p>
-          {pipelineAvailable ? (
-            <>
-              <button
-                type="button"
-                onClick={handleRunPipeline}
-                disabled={pipelineRunLoading}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-md text-xs font-semibold text-white bg-ub-blue hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
-              >
-                {pipelineRunLoading ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Play size={14} />
-                )}
-                {pipelineRunLoading ? 'Starting…' : 'Run AI pipeline'}
-              </button>
-              {pipelineRunError && (
-                <p className="text-xs text-ub-red mt-2">{pipelineRunError}</p>
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-slate-400">
-              Connect to the live API to run analysis on real complaints.
-            </p>
-          )}
-        </section>
       </div>
     </div>
-  )
+  );
 }

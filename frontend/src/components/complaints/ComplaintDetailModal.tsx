@@ -2,8 +2,6 @@
 import {
   X,
   Bot,
-  Send,
-  Loader2,
   ChevronDown,
   ChevronUp,
   User,
@@ -12,6 +10,10 @@ import {
   Clock,
   Shield,
   AlertTriangle,
+  TrendingUp,
+  Activity,
+  Layers,
+  Info,
 } from "lucide-react";
 import type { Complaint } from "../../types";
 import type { ApiComplaint, AgentDecision } from "../../lib/api";
@@ -33,9 +35,9 @@ interface Props {
   onComplaintUpdated?: () => void;
 }
 
-// ── Small helpers ─────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Render a value that might be null/undefined as a styled pill */
+/** Null-safe value renderer */
 function Val({
   v,
   mono = false,
@@ -44,7 +46,7 @@ function Val({
   mono?: boolean;
 }) {
   if (v === null || v === undefined || v === "" || v === "—") {
-    return <span className="text-slate-300 text-[11px] italic">—</span>;
+    return <span className="text-slate-300 italic text-[11px]">—</span>;
   }
   if (typeof v === "boolean") {
     return (
@@ -52,7 +54,7 @@ function Val({
         className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
           v
             ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-            : "bg-slate-100 text-slate-500 border border-slate-200"
+            : "bg-slate-100 text-slate-400 border border-slate-200"
         }`}
       >
         {v ? "Yes" : "No"}
@@ -68,8 +70,8 @@ function Val({
   );
 }
 
-/** A labelled stat cell used in the analysis grid */
-function StatCell({
+/** Labelled stat cell */
+function Cell({
   label,
   children,
   wide = false,
@@ -79,8 +81,8 @@ function StatCell({
   wide?: boolean;
 }) {
   return (
-    <div className={`${wide ? "col-span-2" : ""} space-y-0.5`}>
-      <div className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+    <div className={`${wide ? "col-span-2" : ""} space-y-1`}>
+      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
         {label}
       </div>
       <div className="text-xs">{children}</div>
@@ -88,12 +90,18 @@ function StatCell({
   );
 }
 
-/** Confidence bar — coloured fill */
+/** Confidence bar */
 function ConfBar({ value }: { value: number | null | undefined }) {
   if (value == null) return <Val v={null} />;
   const pct = Math.round(value * 100);
   const colour =
     pct >= 80 ? "bg-emerald-500" : pct >= 60 ? "bg-amber-400" : "bg-red-400";
+  const textColour =
+    pct >= 80
+      ? "text-emerald-600"
+      : pct >= 60
+        ? "text-amber-600"
+        : "text-red-500";
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -102,33 +110,111 @@ function ConfBar({ value }: { value: number | null | undefined }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span
-        className={`font-semibold text-xs ${pct >= 80 ? "text-emerald-600" : pct >= 60 ? "text-amber-600" : "text-red-500"}`}
-      >
+      <span className={`font-semibold text-xs tabular-nums ${textColour}`}>
         {pct}%
       </span>
     </div>
   );
 }
 
-/** Route pill */
-function RoutePill({ route }: { route: string | null | undefined }) {
-  if (!route) return <Val v={null} />;
-  const r = route.toUpperCase();
-  const styles =
-    r === "AUTO" || r === "AUTO_RESPOND"
-      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-      : r === "ESCALATE"
-        ? "bg-violet-50 text-violet-700 border-violet-200"
-        : r === "HUMAN" || r === "HUMAN_REVIEW"
-          ? "bg-amber-50 text-amber-700 border-amber-200"
-          : "bg-slate-50 text-slate-600 border-slate-200";
+/** Route status pill */
+function RouteStatusPill({
+  route,
+  status,
+}: {
+  route?: string | null;
+  status?: string | null;
+}) {
+  const r = (route ?? "").toLowerCase();
+  const s = (status ?? "").toLowerCase();
+
+  if (
+    r === "auto_respond" ||
+    r === "auto" ||
+    s === "auto_respond" ||
+    s === "auto_closed" ||
+    s === "resolved" ||
+    s === "awaiting_feedback"
+  ) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Auto Sent
+      </span>
+    );
+  }
+  if (
+    r === "human_review" ||
+    r === "human" ||
+    s === "human_review" ||
+    s === "pending_review" ||
+    s === "in_review"
+  ) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Human Review
+      </span>
+    );
+  }
+  if (r === "escalate" || r === "escalated" || s === "escalated") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-violet-50 text-violet-700 border border-violet-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-violet-500" /> Escalated
+      </span>
+    );
+  }
+  if (s === "shadow_sent") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-orange-500" /> Shadow Sent
+      </span>
+    );
+  }
+  if (s === "processing") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />{" "}
+        Processing
+      </span>
+    );
+  }
+  return null;
+}
+
+/** Section card wrapper */
+function Card({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <span
-      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold border ${styles}`}
+    <div
+      className={`rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden ${className}`}
     >
-      {route}
-    </span>
+      {children}
+    </div>
+  );
+}
+
+/** Section header inside a card */
+function CardHeader({
+  icon,
+  title,
+  right,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  right?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/60">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+        <span className="text-slate-400">{icon}</span>
+        {title}
+      </div>
+      {right && <div>{right}</div>}
+    </div>
   );
 }
 
@@ -138,23 +224,18 @@ export function ComplaintDetailModal({
   complaint,
   apiDetail,
   loadingDetail,
-  pipelineAvailable: _pipelineAvailable,
   onClose,
-  onAfterRunPipeline: _onAfterRunPipeline,
   onComplaintUpdated: _onComplaintUpdated,
 }: Props) {
-  const [draft, setDraft] = useState("");
   const [agentDecisions, setAgentDecisions] = useState<AgentDecision[]>([]);
-  const [showFullDetail, setShowFullDetail] = useState(false);
   const [showDecisions, setShowDecisions] = useState(false);
+  const [showRawFields, setShowRawFields] = useState(false);
 
   useEffect(() => {
-    const res = complaint.agentResult.resolution;
-    setDraft(res && res !== "—" ? res : "");
     setAgentDecisions([]);
-    setShowFullDetail(false);
     setShowDecisions(false);
-  }, [complaint.id, complaint.agentResult.resolution]);
+    setShowRawFields(false);
+  }, [complaint.id]);
 
   useEffect(() => {
     if (!apiDetail || apiDetail.pipeline_status !== "complete") return;
@@ -172,11 +253,12 @@ export function ComplaintDetailModal({
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const hasDraft = !!draft;
+  const draft = apiDetail?.draft_response ?? complaint.agentResult.resolution;
+  const hasDraft = !!draft && draft !== "—";
   const pipelineComplete = apiDetail?.pipeline_status === "complete";
   const hasAnalysis = pipelineComplete || !!apiDetail?.category;
 
-  const detailFields = apiDetail
+  const rawFields = apiDetail
     ? Object.entries(apiDetail).filter(([k, v]) => {
         if (k === "embedding") return false;
         if (typeof v === "object" && v !== null) return false;
@@ -189,10 +271,13 @@ export function ComplaintDetailModal({
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
       onClick={onClose}
     >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
 
+      {/* Modal — scale-in entrance */}
       <div
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden"
+        className="relative bg-slate-50 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden"
+        style={{ animation: "modalIn 0.2s cubic-bezier(0.16,1,0.3,1) both" }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Header ── */}
@@ -203,13 +288,22 @@ export function ComplaintDetailModal({
                 {complaint.id}
               </span>
               <StatusBadge status={complaint.status} />
+              {apiDetail && (
+                <RouteStatusPill
+                  route={apiDetail.route}
+                  status={apiDetail.status}
+                />
+              )}
               {pipelineComplete && (
                 <span className="text-[11px] bg-white/15 text-white px-2 py-0.5 rounded-full border border-white/20 flex items-center gap-1">
                   <CheckCircle2 size={9} /> Analysis complete
                 </span>
               )}
               {loadingDetail && (
-                <Loader2 size={12} className="text-blue-200 animate-spin" />
+                <span className="text-[11px] bg-white/10 text-blue-200 px-2 py-0.5 rounded-full border border-white/15 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse" />{" "}
+                  Loading…
+                </span>
               )}
             </div>
             <div className="text-blue-200/70 text-xs mt-1 truncate">
@@ -226,85 +320,99 @@ export function ComplaintDetailModal({
         </div>
 
         {/* ── Body ── */}
-        <div className="overflow-y-auto flex-1 p-4 sm:p-5 space-y-4 bg-slate-50/40">
-          {/* ── Row 1: Customer card + Complaint text ── */}
+        <div className="overflow-y-auto flex-1 p-4 sm:p-5 space-y-4">
+          {/* Row 1: Customer + Complaint text */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Customer card */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-sm">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <User size={10} /> Customer
-              </div>
-              <div>
-                <div className="font-bold text-sm text-slate-800 break-all leading-snug">
-                  {complaint.customer}
-                </div>
-                <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                  <Clock size={9} /> {complaint.date} {complaint.time}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <ChannelBadge channel={complaint.channel} />
-                <SeverityBadge severity={complaint.severity} />
-                <SlaBadge
-                  breached={complaint.slaBreached}
-                  label={complaint.slaRemaining}
-                />
-              </div>
-              {/* Tier info */}
-              {apiDetail?.assigned_tier != null && (
-                <div className="rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs space-y-1">
-                  <div className="text-[10px] text-slate-400 uppercase tracking-wide">
-                    Routing
+            <Card>
+              <CardHeader icon={<User size={12} />} title="Customer" />
+              <div className="p-4 space-y-3">
+                {/* Avatar + name */}
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-ub-blue to-blue-700 text-white flex items-center justify-center font-bold text-sm flex-shrink-0 shadow-sm">
+                    {complaint.customer.slice(0, 2).toUpperCase()}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-700">
-                      Tier {apiDetail.assigned_tier}
+                  <div>
+                    <div className="font-semibold text-sm text-slate-800 leading-tight">
+                      {complaint.customer}
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                      <Clock size={9} /> {complaint.date} {complaint.time}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Badges */}
+                <div className="flex flex-wrap gap-1.5">
+                  <ChannelBadge channel={complaint.channel} />
+                  <SeverityBadge severity={complaint.severity} />
+                  <SlaBadge
+                    breached={complaint.slaBreached}
+                    label={complaint.slaRemaining}
+                  />
+                </div>
+
+                {/* Tier routing */}
+                {apiDetail?.assigned_tier != null && (
+                  <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 space-y-1.5">
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Routing
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-slate-700 text-xs">
+                        Tier {apiDetail.assigned_tier}
+                      </span>
+                      {apiDetail.current_tier != null &&
+                        apiDetail.current_tier !== apiDetail.assigned_tier && (
+                          <span className="text-slate-400 text-[11px]">
+                            (escalated from {apiDetail.current_tier})
+                          </span>
+                        )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Duplicate warning */}
+                {apiDetail?.is_duplicate && (
+                  <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-2.5 py-2">
+                    <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
+                    <span>
+                      Possible duplicate of{" "}
+                      {apiDetail.duplicate_of ?? "another complaint"}
                     </span>
-                    {apiDetail.current_tier != null &&
-                      apiDetail.current_tier !== apiDetail.assigned_tier && (
-                        <span className="text-slate-400 text-[11px]">
-                          (was {apiDetail.current_tier})
-                        </span>
-                      )}
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </Card>
 
             {/* Complaint text */}
-            <div className="lg:col-span-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
-                <FileText size={10} /> Complaint text
+            <Card className="lg:col-span-2">
+              <CardHeader
+                icon={<FileText size={12} />}
+                title="Complaint Text"
+                right={
+                  apiDetail?.language && apiDetail.language !== "en" ? (
+                    <span className="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full font-semibold uppercase">
+                      {apiDetail.language} · translated
+                    </span>
+                  ) : undefined
+                }
+              />
+              <div className="p-4">
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {complaint.description && complaint.description !== "—" ? (
+                    complaint.description
+                  ) : (
+                    <span className="text-slate-300 italic">
+                      No text available
+                    </span>
+                  )}
+                </p>
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                {complaint.description && complaint.description !== "—" ? (
-                  complaint.description
-                ) : (
-                  <span className="text-slate-300 italic">
-                    No text available
-                  </span>
-                )}
-              </p>
-              {apiDetail?.language && apiDetail.language !== "en" && (
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1.5">
-                  <span className="font-semibold uppercase">
-                    {apiDetail.language}
-                  </span>
-                  <span className="text-slate-300">·</span>
-                  <span>auto-translated</span>
-                </div>
-              )}
-              {apiDetail?.is_duplicate && (
-                <div className="mt-3 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
-                  <AlertTriangle size={11} />
-                  Possible duplicate of{" "}
-                  {apiDetail.duplicate_of ?? "another complaint"}
-                </div>
-              )}
-            </div>
+            </Card>
           </div>
 
-          {/* ── Shadow override ── */}
+          {/* Shadow override */}
           {apiDetail &&
             (apiDetail.status === "shadow_sent" ||
               apiDetail.shadow_overridden) && (
@@ -314,176 +422,205 @@ export function ComplaintDetailModal({
               />
             )}
 
-          {/* ── Row 2: AI Analysis + Draft Response ── */}
+          {/* Row 2: AI Analysis + Draft Response */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* AI Analysis */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-4">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Bot size={10} /> AI Analysis
-              </div>
-
-              {!hasAnalysis ? (
-                <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-                  <Bot size={28} className="text-slate-200" />
-                  <p className="text-xs text-slate-400">
-                    {apiDetail?.pipeline_status === "processing"
-                      ? "Pipeline is running…"
-                      : "No analysis yet for this complaint."}
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {/* Scores grid */}
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <StatCell label="Category">
-                      <Val v={apiDetail?.category ?? complaint.category} />
-                    </StatCell>
-                    <StatCell label="Sentiment">
-                      <Val v={apiDetail?.sentiment ?? complaint.sentiment} />
-                    </StatCell>
-                    <StatCell label="Urgency">
-                      <Val
-                        v={
-                          apiDetail?.urgency_score != null
-                            ? `${apiDetail.urgency_score}/10`
-                            : null
-                        }
-                      />
-                    </StatCell>
-                    <StatCell label="Severity">
-                      <Val
-                        v={
-                          apiDetail?.severity != null
-                            ? `${apiDetail.severity}/5`
-                            : null
-                        }
-                      />
-                    </StatCell>
-                    <StatCell label="Confidence" wide>
-                      <ConfBar value={apiDetail?.confidence_score} />
-                    </StatCell>
-                    <StatCell label="Grounding">
-                      <ConfBar value={apiDetail?.grounding_score} />
-                    </StatCell>
-                    <StatCell label="Risk Score">
-                      <ConfBar value={apiDetail?.risk_score} />
-                    </StatCell>
-                    <StatCell label="Route">
-                      <RoutePill route={apiDetail?.route} />
-                    </StatCell>
-                    <StatCell label="Compliance" wide>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Val
-                          v={
-                            apiDetail?.compliance_category?.replace(
-                              /_/g,
-                              " ",
-                            ) ?? null
-                          }
-                        />
-                        {apiDetail?.is_rbi_reportable && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200">
-                            <Shield size={9} /> RBI Reportable
-                          </span>
-                        )}
-                      </div>
-                    </StatCell>
-                  </div>
-
-                  {/* Root cause */}
-                  {apiDetail?.root_cause ? (
-                    <div className="rounded-lg bg-slate-50 border border-slate-100 p-3 space-y-1">
-                      <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
-                        Root Cause
-                      </div>
-                      <p className="text-xs text-slate-700 leading-relaxed">
-                        {apiDetail.root_cause}
+            <Card>
+              <CardHeader icon={<Activity size={12} />} title="AI Analysis" />
+              <div className="p-4">
+                {!hasAnalysis ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+                      <Bot size={22} className="text-slate-300" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        {apiDetail?.pipeline_status === "processing"
+                          ? "Pipeline is running…"
+                          : "No analysis yet"}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Run the pipeline to generate AI analysis
                       </p>
                     </div>
-                  ) : null}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Scores grid */}
+                    <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+                      <Cell label="Category">
+                        <Val v={apiDetail?.category ?? complaint.category} />
+                      </Cell>
+                      <Cell label="Sentiment">
+                        <Val v={apiDetail?.sentiment ?? complaint.sentiment} />
+                      </Cell>
+                      <Cell label="Urgency">
+                        <Val
+                          v={
+                            apiDetail?.urgency_score != null
+                              ? `${apiDetail.urgency_score}/10`
+                              : null
+                          }
+                        />
+                      </Cell>
+                      <Cell label="Severity">
+                        <Val
+                          v={
+                            apiDetail?.severity != null
+                              ? `${apiDetail.severity}/5`
+                              : null
+                          }
+                        />
+                      </Cell>
+                      <Cell label="Confidence" wide>
+                        <ConfBar value={apiDetail?.confidence_score} />
+                      </Cell>
+                      <Cell label="Grounding">
+                        <ConfBar value={apiDetail?.grounding_score} />
+                      </Cell>
+                      <Cell label="Risk Score">
+                        <ConfBar value={apiDetail?.risk_score} />
+                      </Cell>
+                      <Cell label="Route">
+                        {apiDetail?.route ? (
+                          <RouteStatusPill
+                            route={apiDetail.route}
+                            status={apiDetail.status}
+                          />
+                        ) : (
+                          <Val v={null} />
+                        )}
+                      </Cell>
+                    </div>
 
-                  {/* Action steps */}
-                  {apiDetail?.action_steps &&
-                    apiDetail.action_steps.length > 0 && (
-                      <div className="rounded-lg bg-slate-50 border border-slate-100 p-3 space-y-1.5">
-                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
-                          Action Steps
+                    {/* Compliance */}
+                    {(apiDetail?.compliance_category ||
+                      apiDetail?.is_rbi_reportable) && (
+                      <div
+                        className={`rounded-xl px-3 py-2.5 border ${apiDetail?.is_rbi_reportable ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}
+                      >
+                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                          <Shield size={10} /> Compliance
                         </div>
-                        <ol className="space-y-1">
-                          {apiDetail.action_steps.map((s, i) => (
-                            <li
-                              key={i}
-                              className="flex gap-2 text-xs text-slate-700"
-                            >
-                              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-ub-blue/10 text-ub-blue text-[10px] font-bold flex items-center justify-center mt-0.5">
-                                {i + 1}
-                              </span>
-                              <span className="leading-snug">{s}</span>
-                            </li>
-                          ))}
-                        </ol>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-medium text-slate-700">
+                            {apiDetail?.compliance_category?.replace(
+                              /_/g,
+                              " ",
+                            ) ?? "—"}
+                          </span>
+                          {apiDetail?.is_rbi_reportable && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 border border-red-200">
+                              <Shield size={9} /> RBI Reportable
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
-                </>
-              )}
-            </div>
 
-            {/* Draft Response */}
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm space-y-3">
-              <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Send size={10} /> Draft Response
-              </div>
+                    {/* Root cause */}
+                    {apiDetail?.root_cause && (
+                      <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-1">
+                        <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                          Root Cause
+                        </div>
+                        <p className="text-xs text-slate-700 leading-relaxed">
+                          {apiDetail.root_cause}
+                        </p>
+                      </div>
+                    )}
 
-              {hasDraft ? (
-                <div className="space-y-3">
-                  <textarea
-                    value={draft}
-                    readOnly
-                    rows={9}
-                    className="w-full text-xs text-slate-700 border border-slate-200 rounded-lg p-3 resize-none focus:outline-none leading-relaxed bg-slate-50/50 cursor-default select-text"
-                  />
-                  {apiDetail?.confidence_score != null && (
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-400">Confidence:</span>
-                      <ConfBar value={apiDetail.confidence_score} />
-                      {apiDetail.confidence_score >= 0.8 && (
-                        <span className="text-emerald-600 font-medium text-[11px]">
-                          High confidence
-                        </span>
+                    {/* Action steps */}
+                    {apiDetail?.action_steps &&
+                      apiDetail.action_steps.length > 0 && (
+                        <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-2">
+                          <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                            Action Steps
+                          </div>
+                          <ol className="space-y-1.5">
+                            {apiDetail.action_steps.map((s, i) => (
+                              <li
+                                key={i}
+                                className="flex gap-2 text-xs text-slate-700"
+                              >
+                                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-ub-blue/10 text-ub-blue text-[10px] font-bold flex items-center justify-center mt-0.5">
+                                  {i + 1}
+                                </span>
+                                <span className="leading-snug">{s}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
                       )}
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Draft Response — read-only */}
+            <Card>
+              <CardHeader
+                icon={<TrendingUp size={12} />}
+                title="Draft Response"
+                right={
+                  <span className="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                    <Info size={9} /> Read-only
+                  </span>
+                }
+              />
+              <div className="p-4 space-y-3">
+                {hasDraft ? (
+                  <>
+                    <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50/80 border border-slate-100 rounded-xl p-3 select-text min-h-[160px]">
+                      {draft}
                     </div>
-                  )}
-                  <p className="text-[11px] text-slate-400 text-center">
-                    Use the Agent Desk tab to Accept, Edit, or Escalate this
-                    draft.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-                  <Send size={28} className="text-slate-200" />
-                  <p className="text-xs text-slate-400">
-                    No draft generated yet.
-                  </p>
-                  <p className="text-[11px] text-slate-300">
-                    Run the pipeline from the Pipeline tab to generate a
-                    response.
-                  </p>
-                </div>
-              )}
-            </div>
+                    {apiDetail?.confidence_score != null && (
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <span className="flex-shrink-0">Confidence:</span>
+                        <ConfBar value={apiDetail.confidence_score} />
+                      </div>
+                    )}
+                    <div className="flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5">
+                      <Info
+                        size={12}
+                        className="text-blue-400 flex-shrink-0 mt-0.5"
+                      />
+                      <p className="text-[11px] text-blue-700 leading-relaxed">
+                        To Accept, Edit, or Escalate this draft, go to the{" "}
+                        <strong>Agent Desk</strong> tab.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center">
+                      <TrendingUp size={22} className="text-slate-300" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-slate-500">
+                        No draft generated yet
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Run the pipeline to generate a response
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
 
-          {/* ── Agent Decisions Trace ── */}
+          {/* Agent Decisions Trace */}
           {agentDecisions.length > 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <Card>
               <button
                 onClick={() => setShowDecisions((v) => !v)}
                 className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
               >
-                <span className="flex items-center gap-1.5">
-                  <Bot size={11} className="text-ub-blue" />
-                  Agent Decisions
-                  <span className="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">
+                <span className="flex items-center gap-2">
+                  <Bot size={12} className="text-ub-blue" />
+                  Agent Decision Trace
+                  <span className="px-1.5 py-0.5 rounded-full bg-ub-blue/10 text-ub-blue text-[10px] font-bold">
                     {agentDecisions.length}
                   </span>
                 </span>
@@ -494,90 +631,94 @@ export function ComplaintDetailModal({
                 )}
               </button>
               {showDecisions && (
-                <div className="px-4 pb-4 space-y-2 border-t border-slate-100">
-                  <div className="pt-3 space-y-2">
-                    {agentDecisions.map((d, i) => (
-                      <div
-                        key={i}
-                        className={`rounded-lg p-3 border text-xs ${
-                          d.status === "failed"
-                            ? "border-red-200 bg-red-50/60"
-                            : "border-slate-100 bg-slate-50/60"
-                        }`}
-                      >
-                        <div className="flex justify-between items-start mb-1.5">
+                <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-2">
+                  {agentDecisions.map((d, i) => (
+                    <div
+                      key={i}
+                      className={`rounded-xl p-3 border text-xs ${
+                        d.status === "failed"
+                          ? "border-red-200 bg-red-50/60"
+                          : "border-slate-100 bg-slate-50/60"
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-1.5">
+                        <span
+                          className={`font-semibold flex items-center gap-1.5 ${d.status === "failed" ? "text-red-700" : "text-slate-800"}`}
+                        >
                           <span
-                            className={`font-semibold flex items-center gap-1.5 ${d.status === "failed" ? "text-red-700" : "text-slate-800"}`}
+                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${
+                              d.status === "failed"
+                                ? "bg-red-100 text-red-600"
+                                : "bg-ub-blue/10 text-ub-blue"
+                            }`}
                           >
-                            <span
-                              className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${
-                                d.status === "failed"
-                                  ? "bg-red-100 text-red-600"
-                                  : "bg-ub-blue/10 text-ub-blue"
-                              }`}
-                            >
-                              {d.agent_order ?? i + 1}
-                            </span>
-                            {d.agent_name}
+                            {d.agent_order ?? i + 1}
                           </span>
-                          <div className="flex items-center gap-2 text-slate-400 flex-shrink-0 ml-2">
-                            {d.confidence != null && (
-                              <span
-                                className={`font-semibold ${d.confidence >= 0.8 ? "text-emerald-600" : "text-amber-500"}`}
-                              >
-                                {Math.round(d.confidence * 100)}%
-                              </span>
-                            )}
-                            {d.duration_ms != null && (
-                              <span className="flex items-center gap-0.5 text-[10px]">
-                                <Clock size={9} />
-                                {d.duration_ms}ms
-                              </span>
-                            )}
-                          </div>
+                          {d.agent_name}
+                        </span>
+                        <div className="flex items-center gap-2 text-slate-400 flex-shrink-0 ml-2">
+                          {d.confidence != null && (
+                            <span
+                              className={`font-semibold ${d.confidence >= 0.8 ? "text-emerald-600" : "text-amber-500"}`}
+                            >
+                              {Math.round(d.confidence * 100)}%
+                            </span>
+                          )}
+                          {d.duration_ms != null && (
+                            <span className="flex items-center gap-0.5 text-[10px]">
+                              <Clock size={9} />
+                              {d.duration_ms}ms
+                            </span>
+                          )}
                         </div>
-                        {d.decision && (
-                          <p className="text-slate-700 font-medium leading-snug">
-                            {d.decision}
-                          </p>
-                        )}
-                        {d.reasoning && (
-                          <p className="text-slate-500 mt-1 leading-relaxed text-[11px]">
-                            {d.reasoning}
-                          </p>
-                        )}
                       </div>
-                    ))}
-                  </div>
+                      {d.decision && (
+                        <p className="text-slate-700 font-medium leading-snug">
+                          {d.decision}
+                        </p>
+                      )}
+                      {d.reasoning && (
+                        <p className="text-slate-500 mt-1 leading-relaxed text-[11px]">
+                          {d.reasoning}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
-            </div>
+            </Card>
           )}
 
-          {/* ── Escalation status ── */}
+          {/* Escalation status */}
           <EscalationStatusSection
             complaintId={apiDetail?.complaint_id}
             enabled={!!apiDetail}
           />
 
-          {/* ── Full backend detail ── */}
-          {apiDetail && (
-            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {/* Raw backend fields */}
+          {apiDetail && rawFields.length > 0 && (
+            <Card>
               <button
-                onClick={() => setShowFullDetail((v) => !v)}
+                onClick={() => setShowRawFields((v) => !v)}
                 className="w-full flex items-center justify-between px-4 py-3 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors"
               >
-                <span>Raw backend fields ({detailFields.length})</span>
-                {showFullDetail ? (
+                <span className="flex items-center gap-2">
+                  <Layers size={12} className="text-slate-400" />
+                  Raw Backend Fields
+                  <span className="px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold">
+                    {rawFields.length}
+                  </span>
+                </span>
+                {showRawFields ? (
                   <ChevronUp size={14} />
                 ) : (
                   <ChevronDown size={14} />
                 )}
               </button>
-              {showFullDetail && (
+              {showRawFields && (
                 <div className="px-4 pb-4 border-t border-slate-100 pt-3 space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3 text-xs">
-                    {detailFields.map(([k, v]) => (
+                    {rawFields.map(([k, v]) => (
                       <div key={k}>
                         <div className="text-[10px] text-slate-400 font-mono mb-0.5">
                           {k}
@@ -605,7 +746,7 @@ export function ComplaintDetailModal({
                         <div className="text-[10px] text-slate-400 font-mono mb-1">
                           grounding_warnings
                         </div>
-                        <pre className="text-xs text-slate-700 bg-slate-50 rounded-lg p-2 border border-slate-100 overflow-auto max-h-40 leading-relaxed">
+                        <pre className="text-xs text-slate-700 bg-slate-50 rounded-xl p-3 border border-slate-100 overflow-auto max-h-40 leading-relaxed">
                           {JSON.stringify(
                             apiDetail.grounding_warnings,
                             null,
@@ -616,7 +757,7 @@ export function ComplaintDetailModal({
                     )}
                 </div>
               )}
-            </div>
+            </Card>
           )}
         </div>
       </div>

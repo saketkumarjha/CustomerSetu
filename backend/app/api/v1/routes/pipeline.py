@@ -177,53 +177,97 @@ async def _save_pipeline_outputs(complaint_id: str, state: PipelineState) -> Non
     """Save all agent outputs from final state to complaints table."""
     supabase = get_supabase()
 
+    # Map route → customer-facing status
+    route = state.get("route", "")
+    if route == "AUTO":
+        customer_status = "auto_closed"
+    elif route in ("HUMAN", "human_review"):
+        customer_status = "human_review"
+    elif route in ("ESCALATE", "escalate"):
+        customer_status = "escalated"
+    else:
+        customer_status = "complete"
+
     update_data = {
-        "masked_text": state.get("masked_text"),
-        "language": state.get("language"),
-        "is_duplicate": state.get("is_duplicate", False),
-        "duplicate_of": state.get("duplicate_of"),
-        "category": state.get("category"),
-        "sentiment": state.get("sentiment"),
-        "urgency_score": state.get("urgency_score"),
-        "compliance_category": state.get("compliance_category"),
-        "is_rbi_reportable": state.get("is_rbi_reportable", False),
-        "severity": state.get("severity"),
-        "severity_score": state.get("severity_score"),
-        "draft_response": state.get("draft_response"),
-        "root_cause": state.get("root_cause"),
-        "action_steps": state.get("action_steps", []),
-        "confidence_score": state.get("confidence_score"),
-        "grounding_score": state.get("grounding_score"),
-        "grounding_warnings": state.get("grounding_warnings", []),
-        "route": state.get("route"),
-        "risk_score": state.get("risk_score"),
-        "sla_hours": state.get("sla_hours"),
-        "rbi_tat_deadline": state.get("rbi_tat_deadline"),
-        "pipeline_status": "complete",
-        "status": state.get("route", "complete"),
-        "tier_level": state.get("tier_level"),
-        "tier_scope": state.get("tier_scope"),
-        "tier_kb_coverage_score": state.get("tier_kb_coverage_score"),
-        "missing_info_indicators": state.get("missing_info_indicators", []),
-        "resolution_type": state.get("resolution_type"),
-        "authority_sufficient": state.get("authority_sufficient"),
-        # Auto-response tracking (populated when route == "AUTO" or orchestrator resolves)
-        "final_response_text":  state.get("formatted_response"),
-        "response_sent_at":     state.get("customer_notified_at"),
-        "response_channel":     state.get("notification_channel"),
-        "tier_resolved_at":     state.get("current_tier"),
-        # Escalation tracking (Route 3)
-        "escalation_count":     state.get("escalation_count", 0),
-        "escalation_path":      state.get("escalation_path", []),
-        "is_escalating":        False,   # always clear after pipeline completes
+        # ── PII / text ────────────────────────────────────────────────────────
+        "masked_text":              state.get("masked_text"),
+        "language":                 state.get("language"),
+        # ── Duplicate detection ───────────────────────────────────────────────
+        "is_duplicate":             state.get("is_duplicate", False),
+        "duplicate_of":             state.get("duplicate_of"),
+        # ── Classification ────────────────────────────────────────────────────
+        "category":                 state.get("category"),
+        "category_confidence":      state.get("category_confidence"),
+        # ── Sentiment / urgency ───────────────────────────────────────────────
+        "sentiment":                state.get("sentiment"),
+        "urgency_score":            state.get("urgency_score"),
+        "escalation_flag":          state.get("escalation_flag", False),
+        # ── Compliance ────────────────────────────────────────────────────────
+        "compliance_category":      state.get("compliance_category"),
+        "is_rbi_reportable":        state.get("is_rbi_reportable", False),
+        "rbi_reportable":           state.get("is_rbi_reportable", False),  # DB column alias
+        # ── Severity ─────────────────────────────────────────────────────────
+        "severity":                 state.get("severity"),
+        "severity_score":           state.get("severity_score"),
+        "severity_breakdown":       state.get("severity_breakdown"),
+        # ── Resolution ───────────────────────────────────────────────────────
+        "draft_response":           state.get("draft_response"),
+        "root_cause":               state.get("root_cause"),
+        "action_steps":             state.get("action_steps", []),
+        # ── Confidence / grounding ────────────────────────────────────────────
+        "confidence_score":         state.get("confidence_score"),
+        "grounding_score":          state.get("grounding_score"),
+        "grounding_warnings":       state.get("grounding_warnings", []),
+        # ── Routing ───────────────────────────────────────────────────────────
+        "route":                    state.get("route"),
+        "risk_score":               state.get("risk_score"),
+        "sla_hours":                state.get("sla_hours"),
+        "rbi_tat_deadline":         state.get("rbi_tat_deadline"),
+        # ── Pipeline / customer-facing status ─────────────────────────────────
+        "pipeline_status":          "complete",
+        "status":                   customer_status,   # never set to "AUTO"/"ESCALATE" etc.
+        # ── Tier fields ───────────────────────────────────────────────────────
+        # After the pipeline finishes, current_tier must equal the final resolved
+        # tier (assigned_tier).  Using "or" chains is unsafe when tier values can
+        # be 0 (falsy), so we use explicit None guards.
+        "assigned_tier":            max((state.get("assigned_tier") or state.get("current_tier") or 1), 1),
+        "current_tier":             max((state.get("assigned_tier") or state.get("current_tier") or 1), 1),
+        # tier_level is NOT a DB column — removed to prevent silent update failure
+        "tier_scope":               state.get("tier_scope"),
+        "tier_kb_coverage_score":   state.get("tier_kb_coverage_score"),
+        "missing_info_indicators":  state.get("missing_info_indicators") or [],
+        "resolution_type":          state.get("resolution_type"),
+        "authority_sufficient":     state.get("authority_sufficient"),
+        # ── Auto-response tracking ────────────────────────────────────────────
+        "final_response_text":      state.get("formatted_response"),
+        "response_sent_at":         state.get("customer_notified_at"),
+        "auto_sent_at":             state.get("customer_notified_at"),
+        "response_channel":         state.get("notification_channel"),
+        "tier_resolved_at":         state.get("current_tier"),  # INTEGER — tier number, not timestamp
+        # ── Escalation tracking ───────────────────────────────────────────────
+        "escalation_count":         state.get("escalation_count", 0),
+        "escalation_path":          state.get("escalation_path", []),
+        "max_tier_reached":         max(
+                                        state.get("max_tier_reached") or 0,
+                                        state.get("current_tier") or 0,
+                                    ),
+        "total_escalations_count":  state.get("escalation_count", 0),
+        "is_escalating":            False,   # always clear — pipeline is done
+        "escalation_loop_detected": state.get("escalation_loop_detected", False),
+        # ── RAG context ───────────────────────────────────────────────────────
+        "context_documents":        state.get("context_documents", []),
     }
 
     try:
-        supabase.table("complaints").update(update_data).eq(
+        result = supabase.table("complaints").update(update_data).eq(
             "complaint_id", complaint_id
         ).execute()
+        if not result.data:
+            logger.warning("[PIPELINE] _save_pipeline_outputs: UPDATE returned no rows for %s — row may not exist", complaint_id)
+        else:
+            logger.info("[PIPELINE] Saved pipeline outputs for %s (route=%s)", complaint_id, update_data.get("route"))
     except Exception as e:
-        print(f"[PIPELINE] Failed to save outputs: {e}")
+        logger.exception("[PIPELINE] Failed to save outputs for %s: %s", complaint_id, e)
 
 
 @router.post(
@@ -316,7 +360,9 @@ async def trigger_pipeline(
         "sla_hours": None,
         "rbi_tat_deadline": None,
         "routing_reason": None,
-        "current_tier": complaint.get("current_tier", 1),
+        # current_tier may be 0 in DB (standard route fast-track result).
+        # Pipeline must use >= 1 so queue lookups land at a real tier.
+        "current_tier": max(complaint.get("current_tier") or 1, 1),
         "assigned_tier": None,
         "escalation_decision": None,
 
@@ -340,7 +386,7 @@ async def trigger_pipeline(
         "escalation_orchestrator_result": None,
 
         # Tier-aware fields
-        "tier_level":               complaint.get("current_tier", 1),
+        "tier_level":               max(complaint.get("current_tier") or 1, 1),
         "tier_scope":               complaint.get("tier_scope"),
         "tier_contact_info":        None,
         "previous_tier_attempts":   None,

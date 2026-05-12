@@ -8,11 +8,11 @@ interface Props {
 const LABELS: Record<TabId, { label: string; desc: string }> = {
   overview: { label: "Overview", desc: "Summary and recent complaints" },
   complaints: { label: "All Complaints", desc: "Search and review complaints" },
-  submit: {
-    label: "Register Complaint",
-    desc: "Enter a complaint for analysis",
-  },
   pipeline: { label: "AI Pipeline", desc: "Step-by-step analysis view" },
+  agent: {
+    label: "Agent Desk",
+    desc: "Your queue, metrics, and case workspace",
+  },
   analytics: { label: "Analytics", desc: "Volumes, satisfaction, and trends" },
   "analytics-overview": {
     label: "Analytics Overview",

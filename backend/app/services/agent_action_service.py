@@ -27,17 +27,17 @@ def _log_feedback(
     time_spent_seconds: int | None = None,
 ) -> None:
     supabase = get_supabase()
-    supabase.table("agent_feedback").insert({
-        "complaint_id":         complaint_id,
-        "agent_id":             agent_id,
-        "action_type":          action_type,
-        "original_draft":       original_draft,
-        "agent_output":         agent_output,
-        "confidence_at_review": confidence_at_review,
-        "time_spent_seconds":   time_spent_seconds,
-        "action_timestamp":     datetime.now(timezone.utc).isoformat(),
-        "feedback_score":       feedback_score,
-    }).execute()
+    try:
+        supabase.table("agent_feedback").insert({
+            "complaint_id":   complaint_id,
+            "agent_id":       agent_id,
+            "action":         action_type,
+            "original_draft": original_draft,
+            "final_response": agent_output,
+            "agent_score":    feedback_score,
+        }).execute()
+    except Exception:
+        pass  # non-critical audit log — do not block the action
 
 
 def _simulate_send(customer_id: str, channel: str, response: str, complaint_id: str) -> str:
@@ -70,7 +70,6 @@ def handle_accept(complaint_id: str, agent_id: str, notes: str = "") -> dict:
     """Agent approves the AI draft and sends it to the customer."""
     supabase = get_supabase()
     c = _get_complaint(complaint_id)
-    now = datetime.now(timezone.utc)
 
     draft = c.get("draft_response", "")
     confidence = c.get("confidence_score") or 0.0
@@ -79,19 +78,18 @@ def handle_accept(complaint_id: str, agent_id: str, notes: str = "") -> dict:
 
     sent_at = _simulate_send(customer_id, channel, draft, complaint_id)
 
+    # Transition status first so update_status reads the correct current status
+    update_status(complaint_id, "auto_closed", changed_by=agent_id,
+                  metadata={"action": "ACCEPT"})
+
     supabase.table("complaints").update({
-        "status":                  "auto_closed",
         "pipeline_status":         "complete",
         "final_response_text":     draft,
         "response_sent_at":        sent_at,
         "response_channel":        channel,
         "agent_action":            "ACCEPT",
         "agent_notes":             notes,
-        "human_review_completed_at": now.isoformat(),
     }).eq("complaint_id", complaint_id).execute()
-
-    update_status(complaint_id, "auto_closed", changed_by=agent_id,
-                  metadata={"action": "ACCEPT"})
     track_review_completed(complaint_id, agent_id, "ACCEPT")
     _log_feedback(
         complaint_id=complaint_id,
@@ -133,7 +131,6 @@ def handle_edit(
     """Agent modifies the AI draft and sends the edited version."""
     supabase = get_supabase()
     c = _get_complaint(complaint_id)
-    now = datetime.now(timezone.utc)
 
     original_draft = c.get("draft_response", "")
     confidence = c.get("confidence_score") or 0.0
@@ -142,19 +139,18 @@ def handle_edit(
 
     sent_at = _simulate_send(customer_id, channel, edited_response, complaint_id)
 
+    # Transition status first so update_status reads the correct current status
+    update_status(complaint_id, "auto_closed", changed_by=agent_id,
+                  metadata={"action": "EDIT"})
+
     supabase.table("complaints").update({
-        "status":                    "auto_closed",
         "pipeline_status":           "complete",
         "final_response_text":       edited_response,
         "response_sent_at":          sent_at,
         "response_channel":          channel,
         "agent_action":              "EDIT",
         "agent_notes":               notes,
-        "human_review_completed_at": now.isoformat(),
     }).eq("complaint_id", complaint_id).execute()
-
-    update_status(complaint_id, "auto_closed", changed_by=agent_id,
-                  metadata={"action": "EDIT"})
     track_review_completed(complaint_id, agent_id, "EDIT")
     _log_feedback(
         complaint_id=complaint_id,
@@ -197,19 +193,18 @@ def handle_reject(
     """Agent rejects the AI draft. Complaint moves to awaiting_agent_response."""
     supabase = get_supabase()
     c = _get_complaint(complaint_id)
-    now = datetime.now(timezone.utc)
 
     original_draft = c.get("draft_response", "")
     confidence = c.get("confidence_score") or 0.0
 
+    # Transition status first so update_status reads the correct current status
+    update_status(complaint_id, "awaiting_agent_response", changed_by=agent_id,
+                  metadata={"action": "REJECT", "reason": rejection_reason})
+
     supabase.table("complaints").update({
-        "status":      "awaiting_agent_response",
         "agent_action": "REJECT",
         "agent_notes":  notes,
     }).eq("complaint_id", complaint_id).execute()
-
-    update_status(complaint_id, "awaiting_agent_response", changed_by=agent_id,
-                  metadata={"action": "REJECT", "reason": rejection_reason})
     track_review_completed(complaint_id, agent_id, "REJECT")
     _log_feedback(
         complaint_id=complaint_id,
@@ -266,17 +261,17 @@ def handle_manual_escalate(
         "escalated_at":      now.isoformat(),
     }).execute()
 
-    # Update complaint tier
+    # Transition status first so update_status reads the correct current status
+    update_status(complaint_id, "escalating", changed_by=agent_id,
+                  metadata={"action": "MANUAL_ESCALATE", "target_tier": target_tier})
+
+    # Update complaint tier fields after status transition
     supabase.table("complaints").update({
         "current_tier":  target_tier,
         "assigned_tier": target_tier,
-        "status":        "escalating",
         "agent_action":  "MANUAL_ESCALATE",
         "agent_notes":   notes,
     }).eq("complaint_id", complaint_id).execute()
-
-    update_status(complaint_id, "escalating", changed_by=agent_id,
-                  metadata={"action": "MANUAL_ESCALATE", "target_tier": target_tier})
     track_review_completed(complaint_id, agent_id, "ESCALATE")
     _log_feedback(
         complaint_id=complaint_id,

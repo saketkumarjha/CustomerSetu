@@ -36,11 +36,13 @@ def validate_action(
     assigned_agent = c.get("assigned_agent_id")
     current_tier   = c.get("current_tier", 1)
 
-    # 2. Complaint must be in_review or pending_review
-    if current_status not in {"in_review", "pending_review"}:
+    # 2. Complaint must be in an actionable state.
+    #    awaiting_agent_response is also valid: agent may accept/edit after an initial reject.
+    actionable = {"in_review", "pending_review", "awaiting_agent_response", "human_review"}
+    if current_status not in actionable:
         return False, (
             f"Complaint is in status '{current_status}'. "
-            f"Actions only allowed on in_review / pending_review complaints."
+            f"Actions only allowed when status is one of: {', '.join(sorted(actionable))}."
         )
 
     # 3. Must be the assigned agent

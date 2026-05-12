@@ -1,22 +1,24 @@
-import { Badge } from './Badge'
+import { Badge } from "./Badge";
 
 interface Props {
-  breached: boolean
-  /** e.g. "240h left" or time remaining */
-  label: string
+  breached: boolean;
+  label: string;
 }
 
 export function SlaBadge({ breached, label }: Props) {
-  if (breached) {
+  if (!label || label === "—") {
+    return <span className="text-xs text-slate-300">—</span>;
+  }
+  if (breached || label === "BREACHED" || label === "Breached") {
     return (
       <Badge variant="destructive" className="uppercase tracking-wide">
         Breached
       </Badge>
-    )
+    );
   }
   return (
     <Badge variant="slaSafe" className="tabular-nums font-semibold">
       {label}
     </Badge>
-  )
+  );
 }

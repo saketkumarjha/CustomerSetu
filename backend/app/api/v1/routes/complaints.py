@@ -253,19 +253,40 @@ async def submit_complaint(
     supabase = get_supabase()
 
     complaint_record = {
-        "complaint_id": complaint_id,
-        "customer_id": customer_id,
-        "channel": channel,
-        "original_text": complaint_text,
-        "merged_text": merged_text,
-        "image_url": image_url,
-        "extraction_method": extraction_method,
-        "pipeline_status": "pending",
-        "status": "pending",
-        "initial_tier": initial_tier,
-        "current_tier": initial_tier,
-        "max_tier_reached": initial_tier,
-        "fast_track_reason": fast_track_reason if initial_tier > 0 else None
+        # ── Identity ──────────────────────────────────────────────────────
+        "complaint_id":             complaint_id,
+        "customer_id":              customer_id,
+        "channel":                  channel,
+        # ── Text ──────────────────────────────────────────────────────────
+        "original_text":            complaint_text,
+        "merged_text":              merged_text,
+        "image_url":                image_url,
+        "extraction_method":        extraction_method,
+        # ── Pipeline state ────────────────────────────────────────────────
+        "pipeline_status":          "pending",
+        "status":                   "pending",
+        # ── Tier routing (pre-pipeline defaults) ──────────────────────────
+        # initial_tier may be 0 (standard route) — keep original for audit,
+        # but current_tier and assigned_tier must be >= 1 so queue queries work.
+        "initial_tier":             initial_tier,
+        "current_tier":             max(initial_tier, 1),
+        "assigned_tier":            max(initial_tier, 1),
+        "max_tier_reached":         initial_tier,
+        "total_escalations_count":  0,
+        "escalation_count":         0,
+        "escalation_path":          [],
+        "is_escalating":            False,
+        "escalation_loop_detected": False,
+        "tier_locked":              False,
+        "shadow_overridden":        False,
+        "is_duplicate":             False,
+        "is_rbi_reportable":        False,
+        "rbi_reportable":           False,
+        # ── NOT NULL jsonb columns (must be present or Supabase rejects) ──
+        "action_steps":             [],
+        "grounding_warnings":       [],
+        "missing_info_indicators":  [],
+        "context_documents":        [],
     }
 
     try:

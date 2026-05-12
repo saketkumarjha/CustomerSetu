@@ -74,10 +74,35 @@ async def update_complaint_status(
     """
     Update the complaints table with pipeline progress.
     Called at key stages: start, after routing, on completion.
+
+    IMPORTANT: internal pipeline states ("processing", "started", "failed")
+    only update pipeline_status — never the customer-facing status column.
+    Customer-facing status is only set by _save_pipeline_outputs once the
+    pipeline completes with a known route.
+
+    NOTE: We explicitly set current_tier=0 and assigned_tier=1 when marking
+    "processing" so the DB trigger (trigger_add_to_agent_queue) does not fire
+    with stale/default tier values and create a premature queue entry at Tier 4.
     """
     supabase = get_supabase()
 
-    update_data = {"pipeline_status": status, "status": status}
+    # Internal pipeline states must NOT overwrite the customer-facing status
+    internal_only = {"processing", "started", "failed"}
+    if status in internal_only:
+        update_data: dict = {
+            "pipeline_status": status,
+            # Anchor tier fields so the DB trigger cannot use wrong defaults
+            "current_tier": 0,
+            "assigned_tier": 1,
+            "is_escalating": False,
+            "escalation_count": 0,
+            "escalation_path": [],
+            "max_tier_reached": 0,
+            "total_escalations_count": 0,
+        }
+    else:
+        update_data = {"pipeline_status": status, "status": status}
+
     if extra_fields:
         update_data.update(extra_fields)
 

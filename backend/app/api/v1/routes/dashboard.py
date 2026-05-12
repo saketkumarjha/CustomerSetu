@@ -44,7 +44,8 @@ async def get_dashboard_stats(
         .select(
             "complaint_id, category, sentiment, severity, route, "
             "pipeline_status, is_rbi_reportable, compliance_category, "
-            "confidence_score, risk_score, status, created_at, channel"
+            "confidence_score, risk_score, status, created_at, channel, "
+            "is_duplicate, assigned_tier, current_tier"
         )
         .gte("created_at", from_date)
         .execute()
@@ -89,6 +90,22 @@ async def get_dashboard_stats(
     # ── RBI summary ───────────────────────────────────────────────────────
     rbi_count = sum(1 for c in complaints if c.get("is_rbi_reportable"))
 
+    # ── Duplicate count ───────────────────────────────────────────────────
+    duplicate_count = sum(1 for c in complaints if c.get("is_duplicate"))
+
+    # ── Auto-sent count (route == auto_respond AND pipeline complete) ─────
+    auto_sent_count = sum(
+        1 for c in complaints
+        if c.get("route") == "auto_respond" and c.get("pipeline_status") == "complete"
+    )
+
+    # ── Tier distribution ─────────────────────────────────────────────────
+    tier_dist: dict[int, int] = {}
+    for c in complaints:
+        tier = c.get("assigned_tier") or c.get("current_tier")
+        if tier is not None:
+            tier_dist[int(tier)] = tier_dist.get(int(tier), 0) + 1
+
     # ── Avg confidence and risk ───────────────────────────────────────────
     conf_scores = [c["confidence_score"] for c in complaints if c.get("confidence_score")]
     risk_scores = [c["risk_score"] for c in complaints if c.get("risk_score")]
@@ -119,6 +136,8 @@ async def get_dashboard_stats(
             "rbi_reportable_rate_percent": round(rbi_count / total * 100, 1),
             "closed": closed,
             "open": open_count,
+            "duplicate_count": duplicate_count,
+            "auto_sent_count": auto_sent_count,
         },
         "averages": {
             "avg_severity": avg_severity,
@@ -153,6 +172,22 @@ async def get_dashboard_stats(
                 for k, v in sorted(
                     channel_dist.items(), key=lambda x: x[1], reverse=True
                 )
+            ],
+            "by_tier": [
+                {
+                    "tier": k,
+                    "label": {
+                        0: "Tier 0 — Auto",
+                        1: "Branch",
+                        2: "Zonal",
+                        3: "Regional",
+                        4: "Head Office",
+                        5: "RBI Ombudsman",
+                    }.get(k, f"Tier {k}"),
+                    "count": v,
+                    "percent": round(v / total * 100, 1),
+                }
+                for k, v in sorted(tier_dist.items())
             ],
         },
         "daily_volume": daily_volume,
@@ -643,7 +678,28 @@ def _empty_stats(days: int) -> dict:
             "total_complaints": 0,
             "auto_responded": 0,
             "human_review": 0,
+            "pending_pipeline": 0,
+            "auto_respond_rate_percent": 0,
+            "rbi_reportable": 0,
+            "rbi_reportable_rate_percent": 0,
+            "closed": 0,
+            "open": 0,
+            "duplicate_count": 0,
+            "auto_sent_count": 0,
         },
+        "averages": {
+            "avg_severity": 0,
+            "avg_confidence_score": 0,
+            "avg_risk_score": 0,
+        },
+        "distributions": {
+            "by_category": [],
+            "by_sentiment": [],
+            "by_severity": [],
+            "by_channel": [],
+            "by_tier": [],
+        },
+        "daily_volume": [],
     }
 
 

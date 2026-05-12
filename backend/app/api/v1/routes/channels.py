@@ -11,13 +11,94 @@ Routes:
   GET  /api/v1/channels/ivr/audio/{filename} — Serve pre-generated MP3 audio files
 """
 import uuid
+import asyncio
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.db.supabase_client import get_supabase
+
+async def _trigger_pipeline_bg(complaint_id: str) -> None:
+    """Fire-and-forget: start the AI pipeline for a complaint in the background."""
+    try:
+        from app.services.supervisor.graph import pipeline_graph
+        from app.services.supervisor.pipeline_state import PipelineState
+        from app.services.supervisor.audit_trail import update_complaint_status
+        from app.services.supervisor.event_bus import event_bus
+        from app.api.v1.routes.pipeline import _save_pipeline_outputs
+
+        supabase = get_supabase()
+        result = supabase.table("complaints").select("*").eq("complaint_id", complaint_id).execute()
+        if not result.data:
+            return
+        complaint = result.data[0]
+
+        # Reset tier/escalation fields BEFORE setting pipeline_status=processing
+        # so the DB trigger (trigger_add_to_agent_queue) cannot fire with stale
+        # defaults and create a premature Tier-4 queue entry.
+        supabase.table("complaints").update({
+            "current_tier": 0,
+            "assigned_tier": 1,
+            "is_escalating": False,
+            "escalation_count": 0,
+            "escalation_path": [],
+            "max_tier_reached": 0,
+            "total_escalations_count": 0,
+            "tier_pending_at": None,
+            "assigned_agent_id": None,
+        }).eq("complaint_id", complaint_id).execute()
+
+        event_bus.create_queue(complaint_id)
+        await update_complaint_status(complaint_id, "processing")
+
+        initial_state: PipelineState = {
+            "complaint_id": complaint_id,
+            "customer_id": complaint.get("customer_id", ""),
+            "channel": complaint.get("channel", ""),
+            "complaint_text": complaint.get("original_text") or "",
+            "merged_text": complaint.get("merged_text") or complaint.get("original_text") or "",
+            "image_url": None,
+            "idempotency_key": None,
+            "masked_text": None, "language": None, "pii_entities_found": None,
+            "is_duplicate": None, "duplicate_of": None, "duplicate_similarity": None,
+            "category": None, "category_confidence": None, "sentiment": None,
+            "urgency_score": None, "escalation_flag": None, "compliance_category": None,
+            "is_rbi_reportable": None, "rbi_supervisor_override": None,
+            "severity": None, "severity_score": None, "severity_breakdown": None,
+            "context_documents": None, "draft_response": None, "root_cause": None,
+            "action_steps": None, "confidence_score": None, "authority_sufficient": None,
+            "grounding_score": None, "grounding_warnings": None, "route": None,
+            "risk_score": None, "sla_hours": None, "rbi_tat_deadline": None,
+            "routing_reason": None, "current_tier": 0, "assigned_tier": None,
+            "escalation_decision": None, "explanation_trace": [], "errors": [],
+            "pipeline_status": "started", "current_agent": None,
+            "formatted_response": None, "notification_channel": None,
+            "customer_notified_at": None, "escalation_info": None,
+            "escalation_count": 0, "escalation_path": [], "is_escalating": False,
+            "escalation_orchestrator_result": None,
+            "tier_level": 0, "tier_scope": None, "tier_contact_info": None,
+            "previous_tier_attempts": None, "tier_kb_coverage_score": None,
+            "missing_info_indicators": None, "resolution_type": None,
+        }
+
+        final_state = await pipeline_graph.ainvoke(initial_state)
+        await _save_pipeline_outputs(complaint_id, final_state)
+        await event_bus.publish(complaint_id, {
+            "event": "pipeline_complete",
+            "complaint_id": complaint_id,
+            "route": final_state.get("route"),
+            "category": final_state.get("category"),
+        })
+    except Exception as exc:
+        print(f"[CHANNELS] Pipeline bg task failed for {complaint_id}: {exc}")
+    finally:
+        try:
+            from app.services.supervisor.event_bus import event_bus
+            await event_bus.close(complaint_id)
+        except Exception:
+            pass
 
 router = APIRouter()
 
@@ -182,6 +263,9 @@ def _insert_complaint(channel: str, customer_id: str, complaint_text: str) -> st
         "initial_tier": 0,
         "current_tier": 0,
         "max_tier_reached": 0,
+        "missing_info_indicators": [],
+        "context_documents": [],
+        "escalation_path": [],
     }
 
     try:
@@ -203,7 +287,7 @@ def _insert_complaint(channel: str, customer_id: str, complaint_text: str) -> st
     status_code=status.HTTP_201_CREATED,
     summary="Simulate a tweet complaint (prototype demo)",
 )
-async def twitter_demo(req: TwitterDemoRequest):
+async def twitter_demo(req: TwitterDemoRequest, background_tasks: BackgroundTasks):
     """
     Prototype demo endpoint — simulates a tweet being picked up by the
     Twitter poller and submitted to the complaint pipeline.
@@ -223,12 +307,15 @@ async def twitter_demo(req: TwitterDemoRequest):
         complaint_text=complaint_text,
     )
 
+    # Trigger the AI pipeline in the background — same as POST /pipeline/run
+    background_tasks.add_task(_trigger_pipeline_bg, complaint_id)
+
     return ChannelDemoResponse(
         complaint_id=complaint_id,
         channel="twitter",
         customer_id=tweet["username"],
         preview=tweet["text"][:100],
-        message=f"Tweet submitted as complaint {complaint_id}. Run the AI pipeline to process it.",
+        message=f"Tweet submitted as {complaint_id}. AI pipeline started.",
     )
 
 
@@ -238,14 +325,10 @@ async def twitter_demo(req: TwitterDemoRequest):
     status_code=status.HTTP_201_CREATED,
     summary="Simulate an IVR call complaint (prototype demo)",
 )
-async def ivr_demo(req: IVRDemoRequest):
+async def ivr_demo(req: IVRDemoRequest, background_tasks: BackgroundTasks):
     """
     Prototype demo endpoint — simulates an IVR call being transcribed by
     Whisper and submitted to the complaint pipeline.
-
-    Uses pre-written transcripts (MP3 files are pre-generated).
-    In production this webhook receives call recordings from Exotel/Twilio,
-    transcribes them in real time, and submits via the same backend endpoint.
     """
     if not 0 <= req.call_index <= 4:
         raise HTTPException(status_code=400, detail="call_index must be 0–4")
@@ -262,12 +345,15 @@ async def ivr_demo(req: IVRDemoRequest):
         complaint_text=complaint_text,
     )
 
+    # Trigger the AI pipeline in the background
+    background_tasks.add_task(_trigger_pipeline_bg, complaint_id)
+
     return ChannelDemoResponse(
         complaint_id=complaint_id,
         channel="ivr",
         customer_id=call["customer_id"],
         preview=call["transcript"][:100],
-        message=f"IVR call submitted as complaint {complaint_id}. Run the AI pipeline to process it.",
+        message=f"IVR call submitted as {complaint_id}. AI pipeline started.",
     )
 
 

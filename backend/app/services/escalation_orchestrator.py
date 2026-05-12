@@ -135,6 +135,21 @@ async def execute_escalation(
     escalation_count = log_result.get("escalation_count", escalation_count + 1)
     escalation_path = log_result.get("escalation_path", projected_path)
 
+    # Mark complaint as actively escalating in DB so the frontend shows the
+    # correct status while the partial pipeline runs at the new tier
+    now_iso = datetime.now(timezone.utc).isoformat()
+    supabase.table("complaints").update({
+        "is_escalating":        True,
+        "last_escalation_at":   now_iso,
+        "escalation_count":     escalation_count,
+        "escalation_path":      escalation_path,
+        "max_tier_reached":     max(db_row.get("max_tier_reached") or 0, to_tier),
+        "total_escalations_count": escalation_count,
+        "current_tier":         to_tier,
+        "assigned_tier":        to_tier,
+        "status":               "escalated",
+    }).eq("complaint_id", complaint_id).execute()
+
     # Anti-rapid-fire cache
     mark_just_escalated(complaint_id, to_tier)
 
@@ -234,7 +249,7 @@ async def execute_escalation(
                 sla_deadline=original_state.get("rbi_tat_deadline"),
             )
 
-            asyncio.create_task(
+            asyncio.ensure_future(
                 schedule_kb_enrichment(
                     complaint_id=complaint_id,
                     draft_response=new_draft,
@@ -372,5 +387,5 @@ def _human_result(tier: int, state: dict, stop_reason: str, escalation_path: lis
         "draft_response": state.get("draft_response", ""),
         "confidence_score": state.get("confidence_score", 0.5),
         "escalation_path": escalation_path,
-        "total_escalations": 0,
+        "total_escalations": state.get("escalation_count") or len(escalation_path),
     }

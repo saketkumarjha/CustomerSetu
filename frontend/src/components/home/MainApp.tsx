@@ -5,8 +5,8 @@ import { Sidebar } from "../layout/Sidebar";
 import { Breadcrumb } from "../layout/Breadcrumb";
 import { OverviewTab } from "../overview/OverviewTab";
 import { ComplaintsTab } from "../complaints/ComplaintsTab";
-import { SubmitTab } from "../submit/SubmitTab";
 import { PipelineTab } from "../pipeline/PipelineTab";
+import { AgentDeskTab } from "../agent/AgentDeskTab";
 import { AnalyticsTab } from "../analytics/AnalyticsTab";
 import { AnalyticsOverview } from "../analytics/AnalyticsOverview";
 import { AIPerformanceAnalytics } from "../analytics/AIPerformanceAnalytics";
@@ -44,8 +44,8 @@ export function MainApp() {
 
           {active === "overview" && <OverviewTab setActive={setActive} />}
           {active === "complaints" && <ComplaintsTab setActive={setActive} />}
-          {active === "submit" && <SubmitTab setActive={setActive} />}
           {active === "pipeline" && <PipelineTab />}
+          {active === "agent" && <AgentDeskTab />}
           {active === "analytics" && <AnalyticsTab />}
           {active === "analytics-overview" && <AnalyticsOverview />}
           {active === "analytics-ai-performance" && <AIPerformanceAnalytics />}

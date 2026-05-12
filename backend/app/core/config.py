@@ -74,23 +74,23 @@ class Settings(BaseSettings):
 
     # Tier → agent mapping (overridable via env as JSON string)
     tier_agent_mapping: dict = {
-        0: ["agent_001", "agent_002", "agent_003"],
-        1: ["agent_101", "agent_102"],
-        2: ["agent_201"],
-        3: ["agent_301"],
-        4: ["agent_401"],
+        0: ["Rishi", "Alok", "Shaunak"],
+        1: ["Saket", "Prince"],
+        2: ["Shubham"],
+        3: ["Shubham Kumar"],
+        4: ["Sarthak"],
     }
 
     # Agent specialisation map
     agent_specialization: dict = {
-        "agent_001": ["UPI", "ATM", "Cards"],
-        "agent_002": ["General Banking", "Savings Account"],
-        "agent_003": ["Internet Banking", "Mobile Banking"],
-        "agent_101": ["Branch Services", "Locker", "KYC"],
-        "agent_102": ["Home Loan", "Personal Loan"],
-        "agent_201": ["Business Loan", "Insurance"],
-        "agent_301": ["Regional Compliance", "Mis-selling"],
-        "agent_401": ["Nodal Office", "Fraud", "RBI Escalation"],
+        "Rishi": ["UPI", "ATM", "Cards"],
+        "Alok": ["General Banking", "Savings Account"],
+        "Shaunak": ["Internet Banking", "Mobile Banking"],
+        "Saket": ["Branch Services", "Locker", "KYC"],
+        "Prince": ["Home Loan", "Personal Loan"],
+        "Shubham": ["Business Loan", "Insurance"],
+        "Shubham Kumar": ["Regional Compliance", "Mis-selling"],
+        "Sarthak": ["Nodal Office", "Fraud", "RBI Escalation"],
     }
 
     class Config:

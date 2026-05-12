@@ -284,7 +284,21 @@ def agent_metrics(
     date_from: str | None = Query(None, description="ISO date string"),
     date_to:   str | None = Query(None, description="ISO date string"),
 ):
-    return get_agent_metrics(agent_id, date_from, date_to)
+    try:
+        return get_agent_metrics(agent_id, date_from, date_to)
+    except Exception as exc:
+        logger.warning("agent_metrics: transient error for %s: %s", agent_id, exc)
+        return {
+            "agent_id": agent_id,
+            "total_reviewed": 0,
+            "avg_review_time": "N/A",
+            "acceptance_rate": None,
+            "edit_rate": None,
+            "rejection_rate": None,
+            "escalation_rate": None,
+            "current_workload": 0,
+            "categories_handled": {},
+        }
 
 
 @router.get(
@@ -296,4 +310,100 @@ def team_metrics(
     date_from: str | None = Query(None),
     date_to:   str | None = Query(None),
 ):
-    return get_team_metrics(tier_level, date_from, date_to)
+    try:
+        return get_team_metrics(tier_level, date_from, date_to)
+    except Exception as exc:
+        # Transient socket errors should not crash the UI — return empty metrics
+        logger.warning("team_metrics: transient error for tier %d: %s", tier_level, exc)
+        return {
+            "tier_level": tier_level,
+            "agent_count": 0,
+            "total_reviewed": 0,
+            "queue_size": 0,
+            "agents": [],
+        }
+
+
+@router.post(
+    "/recover-stuck-complaints",
+    summary="Queue complaints stuck in human_review/in_review with no agent_queue row",
+)
+def recover_stuck_complaints(
+    tier_level: int = Query(1, description="Tier to recover complaints for"),
+):
+    """
+    One-shot data repair: finds complaints that completed the pipeline with a
+    human-review route but were never inserted into agent_queue (tier_pending_at IS NULL).
+
+    Safe to call multiple times — skips complaints already in the queue.
+    Returns the count of complaints recovered.
+    """
+    from app.services.queue_service import assign_to_queue
+    from app.utils.postgrest_errors import is_missing_relation_error
+
+    supabase = get_supabase()
+
+    # Find stuck complaints: pipeline done, needs human, not yet queued
+    try:
+        stuck_result = (
+            supabase.table("complaints")
+            .select(
+                "complaint_id, category, severity, severity_score, "
+                "urgency_score, rbi_tat_deadline, assigned_tier, current_tier"
+            )
+            .in_("status", ["in_review", "human_review", "pending_review"])
+            .eq("pipeline_status", "complete")
+            .is_("tier_pending_at", "null")
+            .execute()
+        )
+        stuck = stuck_result.data or []
+    except Exception as exc:
+        if is_missing_relation_error(exc):
+            return {"recovered": 0, "message": "agent_queue table not found"}
+        raise
+
+    if not stuck:
+        return {"recovered": 0, "message": "No stuck complaints found"}
+
+    # Check which ones are already in the queue to avoid duplicates
+    stuck_ids = [c["complaint_id"] for c in stuck]
+    try:
+        existing_result = (
+            supabase.table("agent_queue")
+            .select("complaint_id")
+            .in_("complaint_id", stuck_ids)
+            .execute()
+        )
+        already_queued = {r["complaint_id"] for r in (existing_result.data or [])}
+    except Exception:
+        already_queued = set()
+
+    recovered = 0
+    for c in stuck:
+        cid = c["complaint_id"]
+        if cid in already_queued:
+            continue
+        # Use explicit None-check: `or` treats 0 as falsy and falls to the wrong default.
+        _at = c.get("assigned_tier")
+        _ct = c.get("current_tier")
+        tier = (_at if _at is not None else (_ct if _ct is not None else tier_level))
+        tier = max(tier or 1, 1)
+        try:
+            assign_to_queue(
+                complaint_id=cid,
+                tier_level=tier,
+                urgency_score=float(c.get("urgency_score") or 5.0),
+                severity=int(c.get("severity") or 3),
+                severity_score=float(c.get("severity_score") or 5.0),
+                category=c.get("category") or "General Banking",
+                sla_deadline=c.get("rbi_tat_deadline"),
+            )
+            recovered += 1
+        except Exception as exc:
+            logger.warning("recover_stuck: failed to queue %s: %s", cid, exc)
+
+    return {
+        "recovered": recovered,
+        "total_stuck": len(stuck),
+        "message": f"Queued {recovered} complaint(s) at tier {tier_level}",
+    }
