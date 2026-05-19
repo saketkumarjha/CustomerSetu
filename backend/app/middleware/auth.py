@@ -1,24 +1,26 @@
 from fastapi import Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from app.core.config import get_settings
 
 # These paths bypass auth entirely
 PUBLIC_PATHS = {"/health", "/", "/docs", "/redoc", "/openapi.json"}
 
-# Webhook paths called by external services (Twilio etc.) — no API key
-WEBHOOK_PATHS = {"/api/v1/channels/whatsapp/webhook"}
+# Webhook paths called by external services (Twilio, email poller) — no API key
+WEBHOOK_PATHS = {
+    "/api/v1/channels/whatsapp/webhook",
+    "/api/v1/channels/email/inbound",
+}
+
+# Methods not declared in any route — must return 405 before auth runs so that
+# Schemathesis / security scanners see the correct status code.
+# TRACE is also blocked to prevent Cross-Site Tracing (XST) attacks.
+_UNSUPPORTED_METHODS = frozenset({"TRACE", "CONNECT"})
 
 
 async def verify_api_key(request: Request, call_next):
-    """
-    API Key Authentication Middleware.
+    if request.method in _UNSUPPORTED_METHODS:
+        return Response(status_code=status.HTTP_405_METHOD_NOT_ALLOWED)
 
-    Reads X-API-Key header and validates against configured key.
-    Public paths (health, docs) are whitelisted.
-
-    For POC: single API key.
-    For Production: JWT tokens with user roles.
-    """
     if request.url.path in PUBLIC_PATHS:
         return await call_next(request)
 

@@ -7,13 +7,14 @@ Routes:
   GET  /api/v1/complaints/{id}            — Single complaint detail
   POST /api/v1/complaints/{id}/shadow-override — Shadow mode override
 """
+import asyncio
 import uuid
 from fastapi import (
     APIRouter, File, Form, UploadFile,
     HTTPException, status, Request,
-    Header, Query, Body
+    Header, Query, Body, Path
 )
-from typing import Optional, Annotated
+from typing import Literal, Optional, Annotated
 import re
 
 from app.models.complaint import ComplaintSubmitResponse
@@ -27,13 +28,29 @@ from app.services.agents.esclation_analyzer import execute_shadow_override
 router = APIRouter()
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+ALLOWED_CHANNELS = {"web", "email", "whatsapp", "twitter", "ivr", "branch", "mobile"}
+
+MAX_COMPLAINT_TEXT_CHARS = 10_000   # ~2,500 tokens — prevents runaway OpenAI spend
+MIN_COMPLAINT_TEXT_CHARS = 10       # rejects one-word garbage submissions
+MAX_CUSTOMER_ID_CHARS    = 64
+
+
+@router.get("/submit", include_in_schema=False)
+@router.delete("/submit", include_in_schema=False)
+@router.patch("/submit", include_in_schema=False)
+@router.put("/submit", include_in_schema=False)
+async def _submit_method_not_allowed():
+    """Return 405 for non-POST methods on /submit before /{complaint_id} can swallow them."""
+    from fastapi.responses import Response
+    return Response(status_code=405, headers={"Allow": "POST"})
 
 
 @router.get(
     "/{complaint_id}",
     summary="Get a complaint with all pipeline outputs",
+    responses={404: {"description": "Complaint not found"}},
 )
-async def get_complaint(complaint_id: str):
+async def get_complaint(complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)")):
     """
     Fetch the complete complaint record including all pipeline outputs.
 
@@ -71,14 +88,15 @@ async def get_complaint(complaint_id: str):
 @router.get(
     "/",
     summary="List all complaints with filters",
+    responses={500: {"description": "Database or range query error"}},
 )
 async def list_complaints(
     route: str = Query(default=None, description="Filter: auto_respond | human_review"),
     category: str = Query(default=None, description="Filter by category"),
-    severity: int = Query(default=None, description="Filter by severity 1-5"),
-    is_rbi_reportable: bool = Query(default=None, description="Filter RBI cases only"),
-    limit: int = Query(default=20, le=100),
-    offset: int = Query(default=0),
+    severity: int = Query(default=None, ge=1, le=5, description="Filter by severity 1-5"),
+    is_rbi_reportable: Optional[str] = Query(default=None, description="Filter RBI cases only (true/false)", pattern="^(true|false|null)$"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     """
     List complaints with optional filters.
@@ -100,14 +118,21 @@ async def list_complaints(
     if severity:
         query = query.eq("severity", severity)
     if is_rbi_reportable is not None:
-        query = query.eq("is_rbi_reportable", is_rbi_reportable)
+        query = query.eq("is_rbi_reportable", is_rbi_reportable.lower() == "true")
 
-    result = (
-        query
-        .order("created_at", desc=True)
-        .range(offset, offset + limit - 1)
-        .execute()
-    )
+    try:
+        result = (
+            query
+            .order("created_at", desc=True)
+            .range(offset, offset + limit - 1)
+            .execute()
+        )
+    except Exception as exc:
+        # PGRST103 fires when offset exceeds the total row count — return empty page
+        code = getattr(exc, "code", None)
+        if code == "PGRST103":
+            return {"total": 0, "limit": limit, "offset": offset, "complaints": []}
+        raise
 
     return {
         "total": result.count,
@@ -160,19 +185,41 @@ def detect_fast_track_tier(text: str) -> tuple[int, str]:
     return 0, "Standard Route"
 
 
+def _rate_limit_string() -> str:
+    from app.core.config import get_settings as _gs
+    return f"{_gs().rate_limit_per_minute}/minute"
+
+
 @router.post(
     "/submit",
     response_model=ComplaintSubmitResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Submit a customer complaint",
+    responses={
+        202: {"description": "Complaint still processing (duplicate idempotency key)"},
+        400: {"description": "Invalid input (text too short/long, bad file type, etc.)"},
+        429: {
+            "description": "Rate limit exceeded — max 10 requests/minute per IP",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {"detail": {"type": "string"}},
+                        "example": {"detail": "Rate limit exceeded: 10 per 1 minute. Please retry after the window resets."},
+                    }
+                }
+            },
+        },
+        500: {"description": "Image processing failed or database insert error"},
+    },
 )
-@limiter.limit("10/minute")
+@limiter.limit(_rate_limit_string)
 async def submit_complaint(
     request: Request,
-    complaint_text: str = Form(...),
-    channel: str = Form(...),
-    customer_id: str = Form(...),
-    image: Optional[UploadFile] = File(None),
+    complaint_text: str = Form(..., min_length=10, max_length=10_000, pattern=r"^[^\x00]*$"),
+    channel: Literal["web", "email", "whatsapp", "twitter", "ivr", "branch", "mobile"] = Form(...),
+    customer_id: str = Form(..., min_length=1, max_length=64),
+    image: Optional[UploadFile] = File(None, description="Optional image file (jpeg, png, webp, gif). Must be a valid file upload, not a string or null."),
     x_idempotency_key: str = Header(
         ...,
         description="A UUID generated by the frontend to prevent duplicate submissions"
@@ -191,13 +238,50 @@ async def submit_complaint(
     """
     settings = get_settings()
 
+    # ── Input validation ──────────────────────────────────────────────────
+    # Strip null bytes — Postgres TEXT columns reject \x00 with a 500 error.
+    complaint_text = complaint_text.strip().replace('\x00', '')
+    if len(complaint_text) < MIN_COMPLAINT_TEXT_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"complaint_text too short (minimum {MIN_COMPLAINT_TEXT_CHARS} characters)."
+        )
+    if len(complaint_text) > MAX_COMPLAINT_TEXT_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"complaint_text too long (maximum {MAX_COMPLAINT_TEXT_CHARS} characters)."
+        )
+
+    channel = channel.strip().lower()
+    if channel not in ALLOWED_CHANNELS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid channel '{channel}'. Allowed: {sorted(ALLOWED_CHANNELS)}."
+        )
+
+    customer_id = customer_id.strip()
+    if not customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="customer_id cannot be empty."
+        )
+    if len(customer_id) > MAX_CUSTOMER_ID_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"customer_id too long (maximum {MAX_CUSTOMER_ID_CHARS} characters)."
+        )
+
     # ── Idempotency check ─────────────────────────────────────────────────
     idempotency_key = x_idempotency_key
 
-    # Returns cached response if key already processed, raises 202 if processing
-    cached_response = await check_idempotency(idempotency_key)
-    if cached_response:
-        return cached_response
+    # Returns:
+    #   None        → new key, proceed normally
+    #   dict        → cached pipeline result, return immediately as 201
+    #   JSONResponse→ 202 still-processing (pass through directly)
+    from fastapi.responses import JSONResponse as _JSONResponse
+    idempotency_result = await check_idempotency(idempotency_key)
+    if idempotency_result is not None:
+        return idempotency_result
 
     # ── Generate complaint ID ─────────────────────────────────────────────
     complaint_id = f"CMP-{uuid.uuid4().hex[:8].upper()}"
@@ -209,10 +293,14 @@ async def submit_complaint(
     merged_text = complaint_text  # default: no image
 
     if image is not None:
-        if image.content_type not in ALLOWED_IMAGE_TYPES:
+        if not image.content_type or image.content_type not in ALLOWED_IMAGE_TYPES:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unsupported file type: {image.content_type}."
+                detail=(
+                    f"Unsupported file type: '{image.content_type or 'unknown'}'. "
+                    f"Accepted: {sorted(ALLOWED_IMAGE_TYPES)}. "
+                    f"The 'image' field must be a real file upload (multipart/form-data), not a plain string."
+                )
             )
 
         file_bytes = await image.read()
@@ -290,7 +378,9 @@ async def submit_complaint(
     }
 
     try:
-        supabase.table("complaints").insert(complaint_record).execute()
+        await asyncio.to_thread(
+            lambda: supabase.table("complaints").insert(complaint_record).execute()
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -321,9 +411,14 @@ async def submit_complaint(
 @router.post(
     "/{complaint_id}/shadow-override",
     summary="Shadow mode auto-send ko override karo",
+    responses={
+        404: {"description": "Complaint not found"},
+        409: {"description": "Complaint not in shadow mode or override window closed"},
+        500: {"description": "Unexpected server error"},
+    },
 )
 async def shadow_override(
-    complaint_id: str,
+    complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)"),
     agent_id: str = Body(...),
     corrected_response: str = Body(...),
     override_reason: str = Body(...),
@@ -348,7 +443,10 @@ async def shadow_override(
         )
         return result
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(status_code=404, detail=msg)
+        raise HTTPException(status_code=409, detail=msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -356,8 +454,12 @@ async def shadow_override(
 @router.get(
     "/{complaint_id}/escalation-status",
     summary="Get auto-escalation status for a complaint",
+    responses={
+        404: {"description": "Complaint not found"},
+        500: {"description": "Database error loading complaint or escalation history"},
+    },
 )
-async def get_escalation_status(complaint_id: str):
+async def get_escalation_status(complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)")):
     """
     Returns the current auto-escalation state for a complaint.
 

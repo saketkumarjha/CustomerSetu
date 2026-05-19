@@ -104,9 +104,11 @@ def predict_sla_breach(
         queue_pressure = 0.8
 
     # ── Signal 3: Severity weight ─────────────────────────────────────────
-    # Counterintuitively, higher severity = MORE attention = faster resolution
-    # But severity 5 (Emergency) is so complex it takes longer
-    severity_weight_map = {1: 0.1, 2: 0.15, 3: 0.25, 4: 0.20, 5: 0.35}
+    # Severity 1-3: less attention → slower resolution → higher breach risk.
+    # Severity 4: critical attention → somewhat faster, but still risky.
+    # Severity 5 (Emergency): so complex it takes longest → highest breach risk.
+    # Values are monotonically increasing so the model is self-consistent.
+    severity_weight_map = {1: 0.10, 2: 0.15, 3: 0.25, 4: 0.30, 5: 0.40}
     severity_weight = severity_weight_map.get(severity, 0.25)
 
     # ── Signal 4: Time of day ──────────────────────────────────────────────

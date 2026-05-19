@@ -135,14 +135,27 @@ def run_pii_detection(text: str) -> dict:
     """
     analyzer, anonymizer = _get_engines()
 
-    # ── Step 1: Detect PII entities ───────────────────────────────────────
+    # ── Step 1: Detect language first ─────────────────────────────────────
+    # Language must be known before Presidio analysis so NLP-based detectors
+    # (e.g. PERSON names) use the correct spaCy model.  Presidio supports
+    # "en" natively; for other languages we fall back to "en" because the
+    # custom Indian PII recognisers (Aadhaar, PAN, IN_PHONE) are regex-based
+    # and language-agnostic.
+    try:
+        language = detect(text)
+    except LangDetectException:
+        language = "en"
+
+    presidio_language = language if language == "en" else "en"
+
+    # ── Step 2: Detect PII entities ───────────────────────────────────────
     analysis_results = analyzer.analyze(
         text=text,
         entities=ENTITIES_TO_DETECT,
-        language="en",
+        language=presidio_language,
     )
 
-    # ── Step 2: Anonymize — replace with type-specific placeholders ───────
+    # ── Step 3: Anonymize — replace with type-specific placeholders ───────
     # Using entity type as the replacement (not a generic <REDACTED>) so that
     # downstream LLMs understand what was masked and can still reason about context.
     # e.g. "My name is <PERSON> and my card number is <CREDIT_CARD>"
@@ -151,12 +164,6 @@ def run_pii_detection(text: str) -> dict:
         analyzer_results=analysis_results,
     )
     masked_text = anonymized.text
-
-    # ── Step 3: Detect language ───────────────────────────────────────────
-    try:
-        language = detect(text)
-    except LangDetectException:
-        language = "en"  # default if detection fails
 
     # ── Step 4: Build audit log — positions and types only, NEVER values ──
     # This is the compliance audit trail. It answers "what PII was present?"

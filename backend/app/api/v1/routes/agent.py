@@ -12,7 +12,7 @@ Endpoints:
 
 import logging
 from typing import Literal
-from fastapi import APIRouter, HTTPException, Query, status as http_status
+from fastapi import APIRouter, HTTPException, Query, Path, Body, status as http_status
 from pydantic import BaseModel, Field
 
 from app.db.supabase_client import get_supabase
@@ -40,7 +40,7 @@ router = APIRouter()
 # ── Request / Response models ─────────────────────────────────────────────────
 
 class AgentActionRequest(BaseModel):
-    agent_id: str
+    agent_id: str = Field(..., min_length=1)
     action: Literal["ACCEPT", "EDIT", "REJECT", "MANUAL_ESCALATE"]
     edited_response: str | None = None
     rejection_reason: str | None = None
@@ -49,6 +49,7 @@ class AgentActionRequest(BaseModel):
 
 
 class NextComplaintRequest(BaseModel):
+    model_config = {"strict": True}
     agent_id: str
     tier_level: int
 
@@ -61,7 +62,7 @@ class NextComplaintRequest(BaseModel):
 )
 def get_queue(
     agent_id: str = Query(..., description="Requesting agent's ID"),
-    tier_level: int = Query(..., description="Tier to query"),
+    tier_level: int = Query(..., ge=1, le=5, description="Tier to query (1–5)"),
     status_filter: str = Query(
         "QUEUED,ASSIGNED,IN_REVIEW",
         description="Comma-separated statuses to include",
@@ -162,8 +163,12 @@ def get_queue(
 @router.get(
     "/complaint/{complaint_id}/context",
     summary="Full review context for a complaint",
+    responses={404: {"description": "Complaint not found"}},
 )
-def get_complaint_context(complaint_id: str, agent_id: str = Query(...)):
+def get_complaint_context(
+    complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)"),
+    agent_id: str = Query(...),
+):
     """
     Returns all AI analysis, the draft response, escalation reasoning, and
     suggested actions for the human agent to make an informed decision.
@@ -187,8 +192,17 @@ def get_complaint_context(complaint_id: str, agent_id: str = Query(...)):
 @router.post(
     "/complaint/{complaint_id}/action",
     summary="Submit agent action: ACCEPT / EDIT / REJECT / MANUAL_ESCALATE",
+    responses={
+        400: {"description": "Invalid action payload (missing required fields)"},
+        404: {"description": "Complaint not found"},
+        409: {"description": "Complaint is not in an actionable state, or agent is not the assigned agent"},
+        500: {"description": "Action handler failed (WhatsApp/email send or DB error)"},
+    },
 )
-def submit_agent_action(complaint_id: str, body: AgentActionRequest):
+def submit_agent_action(
+    complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)"),
+    body: AgentActionRequest = Body(...),
+):
     """
     Process the human agent's review decision.
 
@@ -205,7 +219,11 @@ def submit_agent_action(complaint_id: str, body: AgentActionRequest):
 
     valid, error_msg = validate_action(complaint_id, body.agent_id, body.action, payload)
     if not valid:
-        raise HTTPException(http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=error_msg)
+        if "not found" in error_msg.lower():
+            raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail=error_msg)
+        if "is in status" in error_msg.lower() or "assigned to" in error_msg.lower():
+            raise HTTPException(http_status.HTTP_409_CONFLICT, detail=error_msg)
+        raise HTTPException(http_status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     try:
         if body.action == "ACCEPT":
@@ -306,7 +324,7 @@ def agent_metrics(
     summary="Team-level metrics for a tier",
 )
 def team_metrics(
-    tier_level: int,
+    tier_level: int = Path(..., ge=1, le=5, description="Tier level (1–5)"),
     date_from: str | None = Query(None),
     date_to:   str | None = Query(None),
 ):
@@ -329,7 +347,7 @@ def team_metrics(
     summary="Queue complaints stuck in human_review/in_review with no agent_queue row",
 )
 def recover_stuck_complaints(
-    tier_level: int = Query(1, description="Tier to recover complaints for"),
+    tier_level: int = Query(1, ge=1, le=5, description="Tier to recover complaints for (1–5)"),
 ):
     """
     One-shot data repair: finds complaints that completed the pipeline with a

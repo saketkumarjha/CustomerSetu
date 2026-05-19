@@ -49,45 +49,11 @@ def assign_to_queue(
 
     Returns the queue row dict including assigned_to and queue_position.
 
-    GUARD: Only queues complaints whose pipeline is complete and route
-    requires human review. Prevents the DB trigger from queueing complaints
-    before AI analysis has run.
+    Called from routing_node (inside the pipeline) — the pipeline already
+    guarantees only HUMAN/ESCALATE routes reach this function.
     """
     supabase = get_supabase()
     now = datetime.now(timezone.utc)
-
-    # ── Guard: verify pipeline is complete before queuing ─────────────────
-    # The DB trigger fires on every UPDATE — we must not queue a complaint
-    # that hasn't been analysed yet (pipeline_status != 'complete').
-    try:
-        check = (
-            supabase.table("complaints")
-            .select("pipeline_status, route")
-            .eq("complaint_id", complaint_id)
-            .limit(1)
-            .execute()
-        )
-        if check.data:
-            row_data = check.data[0]
-            ps = row_data.get("pipeline_status", "")
-            route = (row_data.get("route") or "").upper()
-            # Only queue if pipeline is done AND route needs human handling
-            if ps != "complete":
-                return {
-                    "queue_id": None, "complaint_id": complaint_id,
-                    "assigned_to": None, "status": "SKIPPED_PIPELINE_INCOMPLETE",
-                    "queue_position": 0, "priority_score": 0,
-                    "estimated_review_time": 0, "sla_deadline": sla_deadline,
-                }
-            if route in ("AUTO", "AUTO_RESPOND"):
-                return {
-                    "queue_id": None, "complaint_id": complaint_id,
-                    "assigned_to": None, "status": "SKIPPED_AUTO_RESOLVED",
-                    "queue_position": 0, "priority_score": 0,
-                    "estimated_review_time": 0, "sla_deadline": sla_deadline,
-                }
-    except Exception:
-        pass  # If check fails, proceed — better to queue than to block
 
     priority_score = _calculate_priority_score(urgency_score, severity_score)
     estimated_review_time = _estimate_review_time(severity)
@@ -121,10 +87,11 @@ def assign_to_queue(
                 "sla_deadline":          sla_deadline,
             }
         else:
-            # Tier changed (escalation) — mark the old entry as ESCALATED so
+            # Tier changed (escalation) — mark the old entry as COMPLETED so
             # agents at the old tier no longer see it.
+            # ESCALATED is not a valid status (DB constraint: QUEUED|ASSIGNED|IN_REVIEW|COMPLETED).
             supabase.table("agent_queue").update({
-                "status":     "ESCALATED",
+                "status":     "COMPLETED",
                 "updated_at": now.isoformat(),
             }).eq("id", existing_row["id"]).execute()
 

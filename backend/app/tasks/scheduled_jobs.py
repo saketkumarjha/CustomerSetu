@@ -174,8 +174,24 @@ async def process_enrichment_queue() -> dict:
             .execute()
         )
     except Exception as exc:
-        logger.error("[ScheduledJob] process_enrichment_queue query failed: %s", exc)
-        return {"error": str(exc)}
+        # recommended_quality_score column may not exist yet (pre-migration).
+        # Retry with a fallback sort so the job still runs.
+        logger.warning(
+            "[ScheduledJob] process_enrichment_queue: quality sort failed (%s), retrying without it",
+            exc,
+        )
+        try:
+            ready_res = (
+                supabase.table("kb_enrichment_queue")
+                .select("*")
+                .eq("processed", False)
+                .lte("scheduled_for", now)
+                .order("created_at", desc=False)
+                .execute()
+            )
+        except Exception as exc2:
+            logger.error("[ScheduledJob] process_enrichment_queue query failed: %s", exc2)
+            return {"error": str(exc2)}
 
     entries = ready_res.data or []
     if not entries:

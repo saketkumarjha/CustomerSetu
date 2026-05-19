@@ -6,7 +6,7 @@ one entry per agent with decision, confidence, reasoning, and evidence.
 This is what your frontend renders in the pipeline step visualization.
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Path
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
@@ -15,8 +15,9 @@ router = APIRouter()
 @router.get(
     "/{complaint_id}/explanation",
     summary="Get full XAI explanation trace for a complaint",
+    responses={404: {"description": "Complaint not found"}},
 )
-async def get_explanation(complaint_id: str):
+async def get_explanation(complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)")):
     """
     Returns all agent decisions for a complaint in pipeline order.
 
@@ -33,7 +34,7 @@ async def get_explanation(complaint_id: str):
     # Verify complaint exists
     complaint_result = (
         supabase.table("complaints")
-        .select("complaint_id, pipeline_status, route, category, severity, tier_level, tier_scope")
+        .select("complaint_id, pipeline_status, route, category, severity")
         .eq("complaint_id", complaint_id)
         .execute()
     )
@@ -63,9 +64,5 @@ async def get_explanation(complaint_id: str):
         "category": complaint.get("category"),
         "severity": complaint.get("severity"),
         "total_agents": len(decisions),
-        "tier_metadata": {
-            "tier_level": complaint.get("tier_level"),
-            "tier_scope": complaint.get("tier_scope"),
-        },
-        "explanation_trace": decisions,
+"explanation_trace": decisions,
     }

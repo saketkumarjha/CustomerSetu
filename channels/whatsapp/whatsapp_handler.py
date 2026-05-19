@@ -1,45 +1,3 @@
-"""
-WhatsApp Complaint Channel — Twilio Integration
-================================================
-
-Flow:
-  Customer sends WhatsApp message to bank's Twilio number
-        ↓
-  POST /api/v1/channels/whatsapp/webhook  (this file)
-        ↓
-  Rule-based tier detection (detect_fast_track_tier from complaints.py)
-        ↓
-  ┌─────────────────────────────────────────────────────────────┐
-  │  GENERAL QUERY (Tier 0)                                     │
-  │  → Classification Agent classifies the message             │
-  │  → RAG retrieves top-3 KB resolutions                      │
-  │  → GPT-4o drafts a reply from KB context                   │
-  │  → Reply sent instantly via Twilio                         │
-  └─────────────────────────────────────────────────────────────┘
-        ↓
-  ┌─────────────────────────────────────────────────────────────┐
-  │  BRANCH-LEVEL QUERY (Tier 1+)                               │
-  │  → Complaint saved to DB                                    │
-  │  → Full AI pipeline runs in background                     │
-  │  → ACK sent to customer: "Registered as CMP-XXXXXXXX"      │
-  │  → Human agent reviews in Agent Desk                       │
-  │  → Reply sent when agent clicks ACCEPT/EDIT in dashboard   │
-  └─────────────────────────────────────────────────────────────┘
-
-Reply trigger:
-  POST /agent/complaint/{id}/action (ACCEPT or EDIT)
-  → agent_action_service._simulate_send() is replaced by
-    send_whatsapp_reply() when channel == "whatsapp"
-
-Setup:
-  1. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_WHATSAPP_NUMBER in backend/.env
-  2. Set WEBHOOK_BASE_URL to your ngrok/production URL
-  3. In Twilio console → Messaging → WhatsApp Sandbox:
-     Set "When a message comes in" to:
-     https://<your-url>/api/v1/channels/whatsapp/webhook
-  4. pip install twilio (already in requirements if present)
-"""
-
 import uuid
 import asyncio
 import logging
@@ -111,49 +69,28 @@ def send_whatsapp_reply(to_number: str, message: str) -> bool:
         return False
 
 
-# ── Rule-based tier detection (mirrors complaints.py logic) ──────────────────
+# ── Rule-based tier detection ─────────────────────────────────────────────────
 
 def _detect_tier(text: str) -> int:
-    """
-    Returns 0 for general queries, 1+ for branch/escalation queries.
-    Mirrors detect_fast_track_tier() in complaints.py.
-    """
-    import re
-    t = text.lower()
-
-    if any(kw in t for kw in ["ombudsman", "rbi complaint", "banking ombudsman"]):
-        return 5
-    if any(kw in t for kw in ["ceo", "head office", "chairman"]) or re.search(r"\bmd\b", t):
-        return 4
-    if any(kw in t for kw in ["regional office", "regional manager"]):
-        return 3
-    if any(kw in t for kw in ["zonal office", "zone manager"]):
-        return 2
-    if re.search(r"br_[a-z]{2}_\d{3}", t):
-        return 1
-
-    negative = ["worst", "bad", "terrible", "frustrated", "angry", "pathetic",
-                "useless", "fraud", "cheat", "scam", "unprofessional", "rude", "poor"]
-    has_branch = any(kw in t for kw in ["branch manager", "branch staff"])
-    has_neg = any(kw in t for kw in negative)
-    if has_branch and has_neg:
-        return 1
-
-    return 0
+    """Delegate to the shared detect_tier in whatsapp_service."""
+    from app.services.whatsapp_service import detect_tier
+    return detect_tier(text)
 
 
 # ── Instant RAG reply for general queries ─────────────────────────────────────
 
-def _instant_rag_reply(message_text: str) -> str:
+def _instant_rag_reply(message_text: str) -> dict:
     """
     For Tier-0 (general) queries:
     1. Classify the message using Classification Agent
     2. Retrieve top-3 KB resolutions via RAG
     3. Draft a concise WhatsApp reply using GPT-4o
 
+    Returns a dict with 'reply', 'category', and 'context_documents'
+    so callers can persist these alongside the complaint record.
+
     Runs synchronously (called from a background thread via asyncio.to_thread).
     """
-    import json
     from openai import OpenAI
     from app.core.config import get_settings
     from app.services.agents.fanout_agents import _classify_sync
@@ -166,8 +103,10 @@ def _instant_rag_reply(message_text: str) -> str:
     try:
         cls_result = _classify_sync(message_text)
         category = cls_result.get("category", "General Banking")
+        category_confidence = cls_result.get("confidence")
     except Exception:
         category = "General Banking"
+        category_confidence = None
 
     # Step 2: RAG retrieval
     try:
@@ -196,6 +135,12 @@ def _instant_rag_reply(message_text: str) -> str:
         "Write a concise WhatsApp reply:"
     )
 
+    fallback_reply = (
+        "Thank you for contacting Union Bank of India. "
+        "Our team will get back to you shortly. "
+        "For urgent queries, call 1800-22-2244."
+    )
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o",
@@ -206,14 +151,17 @@ def _instant_rag_reply(message_text: str) -> str:
             max_tokens=200,
             temperature=0.3,
         )
-        return resp.choices[0].message.content.strip()
+        reply = resp.choices[0].message.content.strip()
     except Exception as exc:
         logger.error("[WHATSAPP] RAG reply generation failed: %s", exc)
-        return (
-            "Thank you for contacting Union Bank of India. "
-            "Our team will get back to you shortly. "
-            "For urgent queries, call 1800-22-2244."
-        )
+        reply = fallback_reply
+
+    return {
+        "reply": reply,
+        "category": category,
+        "category_confidence": category_confidence,
+        "context_documents": docs,
+    }
 
 
 # ── Save complaint + trigger pipeline ─────────────────────────────────────────
@@ -222,6 +170,7 @@ def _save_and_queue(
     customer_number: str,
     message_text: str,
     tier: int,
+    image_url: Optional[str] = None,
 ) -> str:
     """Insert complaint into DB and return complaint_id."""
     from app.db.supabase_client import get_supabase
@@ -234,11 +183,12 @@ def _save_and_queue(
         "channel":                 "whatsapp",
         "original_text":           message_text,
         "merged_text":             message_text,
+        "image_url":               image_url,
         "pipeline_status":         "pending",
         "status":                  "pending",
         "initial_tier":            tier,
         "current_tier":            tier,
-        "assigned_tier":           max(tier, 1),
+        "assigned_tier":           tier,
         "max_tier_reached":        tier,
         "total_escalations_count": 0,
         "escalation_count":        0,
@@ -278,6 +228,7 @@ async def _run_pipeline_bg(complaint_id: str) -> None:
         await update_complaint_status(complaint_id, "processing")
 
         from app.services.supervisor.pipeline_state import PipelineState
+        _initial_tier = max(complaint.get("initial_tier") or 1, 1)
         initial_state: PipelineState = {
             "complaint_id": complaint_id,
             "customer_id": complaint.get("customer_id", ""),
@@ -295,7 +246,7 @@ async def _run_pipeline_bg(complaint_id: str) -> None:
             "action_steps": None, "confidence_score": None, "authority_sufficient": None,
             "grounding_score": None, "grounding_warnings": None, "route": None,
             "risk_score": None, "sla_hours": None, "rbi_tat_deadline": None,
-            "routing_reason": None, "current_tier": complaint.get("current_tier", 0),
+            "routing_reason": None, "current_tier": _initial_tier,
             "assigned_tier": None, "escalation_decision": None,
             "explanation_trace": [], "errors": [],
             "pipeline_status": "started", "current_agent": None,
@@ -303,7 +254,7 @@ async def _run_pipeline_bg(complaint_id: str) -> None:
             "customer_notified_at": None, "escalation_info": None,
             "escalation_count": 0, "escalation_path": [], "is_escalating": False,
             "escalation_orchestrator_result": None,
-            "tier_level": complaint.get("current_tier", 0), "tier_scope": None,
+            "tier_level": _initial_tier, "tier_scope": None,
             "tier_contact_info": None, "previous_tier_attempts": None,
             "tier_kb_coverage_score": None, "missing_info_indicators": None,
             "resolution_type": None,
@@ -336,9 +287,11 @@ async def _run_pipeline_bg(complaint_id: str) -> None:
 )
 async def whatsapp_webhook(
     background_tasks: BackgroundTasks,
-    From: str = Form(...),          # e.g. "whatsapp:+919876543210"
-    Body: str = Form(...),          # message text
+    From: str = Form(...),                            # e.g. "whatsapp:+919876543210"
+    Body: str = Form(default=""),                     # message text (empty if image-only)
     NumMedia: Optional[str] = Form(default="0"),
+    MediaUrl0: Optional[str] = Form(default=None),    # first attached image URL (if any)
+    MediaContentType0: Optional[str] = Form(default=None),
 ):
     """
     Twilio calls this endpoint for every incoming WhatsApp message.
@@ -351,6 +304,12 @@ async def whatsapp_webhook(
     """
     customer_number = From  # already has "whatsapp:" prefix from Twilio
     message_text = Body.strip()
+    has_media = int(NumMedia or 0) > 0
+
+    # If customer sent only an image with no text, use a placeholder so the
+    # complaint is still registered and human agents can view the media URL.
+    if not message_text and has_media:
+        message_text = f"[Image attachment] {MediaUrl0 or ''}"
 
     if not message_text:
         return ""
@@ -362,39 +321,89 @@ async def whatsapp_webhook(
     if tier == 0:
         # ── GENERAL QUERY: instant RAG reply ──────────────────────────────
         background_tasks.add_task(
-            _handle_general_query, customer_number, message_text
+            _handle_general_query, customer_number, message_text, MediaUrl0
         )
     else:
         # ── BRANCH-LEVEL QUERY: register + pipeline + ACK ─────────────────
         background_tasks.add_task(
-            _handle_branch_query, customer_number, message_text, tier
+            _handle_branch_query, customer_number, message_text, tier, MediaUrl0
         )
 
     # Return empty TwiML — actual reply sent via REST API in background
     return ""
 
 
-async def _handle_general_query(customer_number: str, message_text: str) -> None:
-    """Background task: RAG reply for general queries."""
+async def _handle_general_query(
+    customer_number: str, message_text: str, image_url: Optional[str] = None
+) -> None:
+    """Background task: save general query to DB, generate RAG reply, update record."""
+    import datetime
+    from app.db.supabase_client import get_supabase
+
+    # 1. Persist to DB immediately so the complaint appears in the dashboard
+    complaint_id = _save_and_queue(customer_number, message_text, tier=0, image_url=image_url)
+    logger.info("[WHATSAPP] General query registered %s for %s", complaint_id, customer_number)
+
+    fallback = (
+        "Thank you for contacting Union Bank of India. "
+        "Our team will assist you shortly. Call 1800-22-2244 for urgent help."
+    )
+
     try:
-        reply = await asyncio.to_thread(_instant_rag_reply, message_text)
+        # 2. Generate RAG reply (returns dict with reply + metadata)
+        result = await asyncio.to_thread(_instant_rag_reply, message_text)
+        reply = result["reply"]
+
+        # 3. Send reply via WhatsApp
         send_whatsapp_reply(customer_number, reply)
-        logger.info("[WHATSAPP] General query answered for %s", customer_number)
+        logger.info("[WHATSAPP] General query answered for %s (%s)", customer_number, complaint_id)
+
+        # 4. Update DB with full resolution details — mirrors _save_pipeline_outputs
+        now = datetime.datetime.utcnow().isoformat()
+        get_supabase().table("complaints").update({
+            "status":               "auto_closed",
+            "pipeline_status":      "complete",
+            "route":                "AUTO",
+            "category":             result["category"],
+            "category_confidence":  result["category_confidence"],
+            "context_documents":    result["context_documents"],
+            "draft_response":       reply,
+            "final_response_text":  reply,
+            "response_sent_at":     now,
+            "auto_sent_at":         now,
+            "response_channel":     "whatsapp",
+            "current_tier":         0,
+            "assigned_tier":        0,
+            "resolution_type":      "auto_rag",
+            "is_rbi_reportable":    False,
+            "rbi_reportable":       False,
+            "escalation_flag":      False,
+            "is_escalating":        False,
+            "escalation_count":     0,
+            "max_tier_reached":     0,
+            "total_escalations_count": 0,
+        }).eq("complaint_id", complaint_id).execute()
+
     except Exception as exc:
-        logger.error("[WHATSAPP] General query handler failed: %s", exc)
-        send_whatsapp_reply(
-            customer_number,
-            "Thank you for contacting Union Bank of India. "
-            "Our team will assist you shortly. Call 1800-22-2244 for urgent help."
-        )
+        logger.error("[WHATSAPP] General query handler failed for %s: %s", complaint_id, exc)
+        send_whatsapp_reply(customer_number, fallback)
+        # Mark the DB record so agents know it needs attention
+        try:
+            get_supabase().table("complaints").update({
+                "pipeline_status": "failed",
+                "status":          "pending",
+                "route":           "HUMAN",
+            }).eq("complaint_id", complaint_id).execute()
+        except Exception:
+            pass
 
 
 async def _handle_branch_query(
-    customer_number: str, message_text: str, tier: int
+    customer_number: str, message_text: str, tier: int, image_url: Optional[str] = None
 ) -> None:
     """Background task: register complaint, run pipeline, send ACK."""
     try:
-        complaint_id = _save_and_queue(customer_number, message_text, tier)
+        complaint_id = _save_and_queue(customer_number, message_text, tier, image_url=image_url)
 
         # Send acknowledgement immediately
         tier_labels = {

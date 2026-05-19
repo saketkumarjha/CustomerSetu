@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     twilio_whatsapp_number: str = "whatsapp:+14155238886"
     webhook_base_url: str = ""
 
+    # Email SMTP (outbound customer reply emails)
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    email_from_address: str = "customercare@unionbankofindia.com"
+
     # Response templates
     tier_templates_path: str = "app/templates/tier_responses/"
 

@@ -9,7 +9,7 @@ Two endpoints:
 import json
 import logging
 import asyncio
-from fastapi import APIRouter, HTTPException, status, Request, BackgroundTasks
+from fastapi import APIRouter, HTTPException, status, Request, BackgroundTasks, Path
 from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ async def run_pipeline(initial_state: PipelineState) -> None:
             supabase = get_supabase()
             q_result = (
                 supabase.table("agent_queue")
-                .select("assigned_to, queue_position, priority_score, sla_deadline, estimated_review_time")
+                .select("assigned_to, queue_position, priority_score, sla_deadline, estimated_review_time, tier_level")
                 .eq("complaint_id", complaint_id)
                 .order("created_at", desc=True)
                 .limit(1)
@@ -133,6 +133,7 @@ async def run_pipeline(initial_state: PipelineState) -> None:
                 ),
                 "assignment": {
                     "assigned_to":          q_row.get("assigned_to"),
+                    "tier_level":           q_row.get("tier_level"),
                     "queue_position":       q_row.get("queue_position"),
                     "estimated_wait_time":  f"{q_row.get('estimated_review_time', 12)} min",
                     "sla_deadline":         q_row.get("sla_deadline"),
@@ -140,6 +141,42 @@ async def run_pipeline(initial_state: PipelineState) -> None:
                 "draft_response": {
                     "text":           final_state.get("draft_response"),
                     "confidence":     final_state.get("confidence_score"),
+                    "can_be_accepted": (final_state.get("confidence_score") or 0) >= 0.80,
+                },
+            })
+
+        elif route == "HUMAN":
+            # Direct HUMAN override (RBI/fraud/compliance rules fired) — routing_node
+            # sent the complaint straight to a high tier without going through escalation.
+            # The HUMAN_AT_CURRENT_TIER case above doesn't match here because
+            # escalation_decision is None for plain override routing.
+            from app.db.supabase_client import get_supabase
+            supabase = get_supabase()
+            q_result = (
+                supabase.table("agent_queue")
+                .select("assigned_to, queue_position, priority_score, sla_deadline, estimated_review_time, tier_level")
+                .eq("complaint_id", complaint_id)
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+            q_row = q_result.data[0] if q_result.data else {}
+
+            final_summary.update({
+                "route":            "human_review",
+                "tier":             final_state.get("assigned_tier") or final_state.get("current_tier", 4),
+                "confidence":       final_state.get("confidence_score"),
+                "override_triggered": True,
+                "assignment": {
+                    "assigned_to":         q_row.get("assigned_to"),
+                    "tier_level":          q_row.get("tier_level"),
+                    "queue_position":      q_row.get("queue_position"),
+                    "estimated_wait_time": f"{q_row.get('estimated_review_time', 12)} min",
+                    "sla_deadline":        q_row.get("sla_deadline"),
+                },
+                "draft_response": {
+                    "text":            final_state.get("draft_response"),
+                    "confidence":      final_state.get("confidence_score"),
                     "can_be_accepted": (final_state.get("confidence_score") or 0) >= 0.80,
                 },
             })
@@ -274,10 +311,11 @@ async def _save_pipeline_outputs(complaint_id: str, state: PipelineState) -> Non
     "/run/{complaint_id}",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Trigger pipeline for a complaint",
+    responses={404: {"description": "Complaint not found"}},
 )
 async def trigger_pipeline(
-    complaint_id: str,
-    background_tasks: BackgroundTasks,
+    complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)"),
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Fetch complaint from Supabase and start the LangGraph pipeline.
@@ -408,8 +446,13 @@ async def trigger_pipeline(
 @router.get(
     "/stream/{complaint_id}",
     summary="SSE stream — real-time pipeline agent updates",
+    response_class=EventSourceResponse,
+    include_in_schema=False,  # SSE streams can't be tested by REST schema validators
 )
-async def stream_pipeline(request: Request, complaint_id: str):
+async def stream_pipeline(
+    request: Request,
+    complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)"),
+):
     """
     Server-Sent Events stream for real-time pipeline updates.
 
@@ -438,13 +481,15 @@ async def stream_pipeline(request: Request, complaint_id: str):
                 logger.info("[SSE] client disconnected complaint_id=%s", complaint_id)
                 break
 
-            et = event.get("event", "agent_update")
-            logger.info("[SSE] emit complaint_id=%s event=%s", complaint_id, et)
+            event_type = event.get("event", "agent_update")
+            logger.info("[SSE] emit complaint_id=%s event=%s", complaint_id, event_type)
 
-            event_type = event.pop("event", "agent_update")
+            # Build payload without the 'event' key (it becomes the SSE event type field).
+            # Use dict comprehension instead of pop() to avoid mutating the shared dict.
+            payload = {k: v for k, v in event.items() if k != "event"}
             yield {
                 "event": event_type,
-                "data": json.dumps(event)
+                "data": json.dumps(payload)
             }
 
         # Stream ended

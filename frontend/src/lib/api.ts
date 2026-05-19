@@ -443,6 +443,12 @@ export const api = {
     weeklyReview: () => apiPost("/api/v1/admin/kb/jobs/weekly-review"),
     cleanup: () => apiPost("/api/v1/admin/kb/jobs/cleanup"),
   },
+  settings: {
+    getAutoMode: () =>
+      apiGet<{ enabled: boolean }>("/api/v1/settings/auto-mode"),
+    setAutoMode: (enabled: boolean) =>
+      apiPost<{ enabled: boolean }>("/api/v1/settings/auto-mode", { enabled }),
+  },
 };
 
 // ── Backend API response types ────────────────────────────────────────────────
@@ -938,9 +944,10 @@ export interface KBBulkValidateResult {
 }
 
 export interface KBBulkImportResult {
-  imported: number;
-  errors: number;
-  rows?: Array<Record<string, unknown>>;
+  total_rows: number;
+  successful: number;
+  failed: number;
+  errors: Array<Record<string, unknown>>;
 }
 
 export interface RootCauseAnalysis {

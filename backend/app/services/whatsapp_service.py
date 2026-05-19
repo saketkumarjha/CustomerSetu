@@ -59,27 +59,226 @@ def send_whatsapp_reply(to_number: str, message: str) -> bool:
 
 def detect_tier(text: str) -> int:
     """
-    Returns 0 for general queries, 1+ for branch/escalation queries.
-    Mirrors detect_fast_track_tier() in complaints.py.
+    Returns 0 for general queries, 1+ for branch/escalation complaints.
+    Used by both email and WhatsApp inbound handlers.
+
+    Tier 0 — General inquiry / informational (RAG auto-reply)
+    Tier 1 — Branch-level formal complaint (pipeline + human review)
+    Tier 2 — Zonal escalation explicitly requested
+    Tier 3 — Regional escalation explicitly requested
+    Tier 4 — Head Office / Nodal
+    Tier 5 — RBI Ombudsman
     """
     import re
     t = text.lower()
 
-    if any(kw in t for kw in ["ombudsman", "rbi complaint", "banking ombudsman"]):
+    # ── Tier 0 fast-exit: obvious general banking inquiries ──────────────────
+    # If the message is clearly informational (no complaint signals at all),
+    # bail early so we don't waste time scanning Tier 1+ keyword lists.
+    _inquiry_openers = [
+        "what is", "what are", "how do i", "how to", "how can i",
+        "please tell me", "can you tell me", "could you please",
+        "i want to know", "i would like to know", "i need information",
+        "please let me know", "kindly let me know",
+        "what is the interest rate", "what is the rate", "what is the process",
+        "eligibility criteria", "documents required", "documentation needed",
+        "how to open", "how to apply", "how to check", "how to link",
+        "what is ifsc", "what is swift", "what is micr",
+        "branch timing", "branch hours", "working hours", "atm location",
+        "nearest atm", "nearest branch",
+    ]
+    # Only treat as Tier 0 if it's a clean inquiry — no negative/complaint words
+    _complaint_signals = [
+        "complaint", "issue", "problem", "not working", "failed", "failure",
+        "deducted", "charged", "fraud", "dispute", "refund", "error",
+        "wrong", "incorrect", "blocked", "frozen", "unauthorized",
+        "grievance", "escalate", "disgusted", "frustrated", "angry",
+        "harassment", "cheat", "scam",
+    ]
+    if (
+        any(t.startswith(op) or t[t.find("subject:"):].lstrip("subject: ").startswith(op)
+            for op in _inquiry_openers)
+        and not any(sig in t for sig in _complaint_signals)
+    ):
+        return 0
+
+    # ── Tier 5 — Ombudsman / RBI escalation ──────────────────────────────────
+    if any(kw in t for kw in ["ombudsman", "rbi complaint", "banking ombudsman", "rbi ombudsman"]):
         return 5
-    if any(kw in t for kw in ["ceo", "head office", "chairman"]) or re.search(r"\bmd\b", t):
+
+    # ── Tier 4 — Head Office / Senior leadership ──────────────────────────────
+    if any(kw in t for kw in ["ceo", "head office", "chairman", "managing director"]) \
+            or re.search(r"\bmd\b", t):
         return 4
-    if any(kw in t for kw in ["regional office", "regional manager"]):
+
+    # ── Tier 3 — Regional ─────────────────────────────────────────────────────
+    if any(kw in t for kw in ["regional office", "regional manager", "regional head"]):
         return 3
-    if any(kw in t for kw in ["zonal office", "zone manager"]):
+
+    # ── Tier 2 — Zonal ───────────────────────────────────────────────────────
+    if any(kw in t for kw in [
+        "zonal office", "zone manager", "zonal head",
+        "zonal officer", "area manager", "area office",
+        "circle office", "circle head", "controlling office",
+        "divisional office", "divisional manager",
+        "cluster manager", "territory manager",
+        "lead bank manager", "field general manager",
+    ]):
         return 2
+
+    # ── Tier 1 — Branch code pattern ─────────────────────────────────────────
     if re.search(r"br_[a-z]{2}_\d{3}", t):
         return 1
 
-    negative = ["worst", "bad", "terrible", "frustrated", "angry", "pathetic",
-                "useless", "fraud", "cheat", "scam", "unprofessional", "rude", "poor"]
-    if any(kw in t for kw in ["branch manager", "branch staff"]) and \
-       any(kw in t for kw in negative):
+    # ── Tier 1 — Explicit complaint / grievance intent ────────────────────────
+    if any(kw in t for kw in [
+        "writing to raise a grievance", "raise a grievance", "raising a grievance",
+        "lodge a complaint", "lodging a complaint", "formal complaint",
+        "register a complaint", "registering a complaint",
+        "file a complaint", "filing a complaint",
+        "escalate this matter", "escalate to higher", "higher authorities",
+        "approach rbi", "consumer forum",
+        "want to complain", "wish to complain",
+        "raise this issue", "bring to your notice",
+        "i am writing to", "this is to bring",
+    ]):
+        return 1
+
+    # ── Tier 1 — Digital payment & transaction failures ───────────────────────
+    if any(kw in t for kw in [
+        # UPI
+        "upi failed", "upi failure", "upi not working", "upi blocked",
+        "upi transaction not", "upi amount", "upi payment failed",
+        # NEFT / RTGS / IMPS
+        "neft failed", "neft not credited", "neft returned", "neft not received",
+        "rtgs failed", "rtgs not credited", "rtgs not received",
+        "imps failed", "imps not credited", "imps not received",
+        # General transfer failures
+        "transaction failed", "payment failed", "transfer failed",
+        "money not credited", "amount not credited", "money not received",
+        "amount not received", "fund not transferred", "funds not received",
+        "payment not processed", "transaction pending since",
+        "debited but not credited", "deducted but not received",
+        "debited but not received", "amount debited not received",
+        # Reversal not done
+        "reversal not done", "reversal not credited", "reversal pending",
+    ]):
+        return 1
+
+    # ── Tier 1 — Account, card & loan service failures ────────────────────────
+    if any(kw in t for kw in [
+        # Account issues
+        "account blocked", "account frozen", "account suspended",
+        "account closed without", "account deactivated", "account inactive",
+        "account hold", "lien marked", "lien on account",
+        # Card issues
+        "card blocked", "card not received", "card not working",
+        "card swallowed", "atm swallowed", "cash not dispensed",
+        "atm cash not", "atm did not dispense", "cash not came out",
+        # Cheque
+        "cheque bounced", "cheque dishonoured", "cheque returned",
+        "cheque not cleared", "clearing failed", "cheque pending",
+        "dd not issued", "demand draft not", "pay order not",
+        # Loan / EMI
+        "emi deducted twice", "emi deducted double", "double emi",
+        "emi not posted", "emi not credited", "emi bounced",
+        "loan not disbursed", "loan amount not credited",
+        "loan account not updated", "pre-emi not received",
+        "moratorium not applied", "moratorium not given",
+        # Salary / pension
+        "salary not credited", "salary not received",
+        "pension not credited", "pension not received",
+        "scholarship not credited",
+        # KYC / digital access
+        "kyc rejected", "kyc not updated", "kyc blocked",
+        "kyc pending", "kyc issue", "kyc not done",
+        "net banking locked", "mobile banking blocked",
+        "otp not received", "otp not coming",
+        "internet banking not working", "mobile banking not working",
+        "net banking not working", "app not working",
+        # Statement / passbook
+        "passbook not updated", "wrong entry in passbook",
+        "incorrect statement", "statement error",
+        "balance showing wrong", "wrong balance shown",
+        "mini statement incorrect",
+        # FD / RD
+        "fd not matured", "fd maturity not credited", "fd amount not received",
+        "rd not credited", "rd maturity pending",
+        # Locker
+        "locker not opened", "locker access denied", "locker broken",
+        # Interest / charges complaint
+        "interest not credited", "interest wrongly calculated",
+        "excess interest charged", "penal interest wrongly",
+    ]):
+        return 1
+
+    # ── Tier 1 — Branch staff complaint + negative / distress language ────────
+    _branch_kw = [
+        "branch manager", "branch staff", "branch visit",
+        "visited the branch", "went to the branch", "at the branch",
+        "branch officer", "counter staff", "relationship manager",
+        "customer service officer", "bank employee", "bank official",
+        "bank representative", "bank executive",
+    ]
+    _negative_kw = [
+        # Emotional
+        "worst", "bad", "terrible", "frustrated", "angry", "pathetic",
+        "useless", "fraud", "cheat", "scam", "unprofessional", "rude", "poor",
+        # Formal complaint language
+        "denied", "distress", "hardship", "unacceptable", "no help",
+        "no empathy", "no response", "no resolution", "no assistance",
+        "harassment", "misbehavior", "negligence", "mental distress",
+        "shock", "deeply concerned", "urgently request",
+        # Additional distress signals
+        "humiliated", "insulted", "ignored", "disrespectful",
+        "misbehaved", "misconduct", "irresponsible", "incompetent",
+        "not cooperative", "not helpful", "refused to help",
+        "turned away", "sent back", "not attended",
+    ]
+    if any(kw in t for kw in _branch_kw) and any(kw in t for kw in _negative_kw):
+        return 1
+
+    # ── Tier 1 — Specific financial disputes (unauthorised / erroneous charges) ─
+    if any(kw in t for kw in [
+        "unauthorized transaction", "unauthorised transaction",
+        "wrongly charged", "incorrectly debited", "erroneous charge",
+        # Non-maintenance charge variants
+        "non-maintenance charge", "non-maintenance fee", "non-maintenance",
+        "minimum balance charge", "average balance charge",
+        "sms charge", "annual fee charged", "renewal fee charged",
+        # Deduction variants
+        "deducted without", "deducted due to", "amount deducted",
+        "balance deducted", "money deducted", "wrongly deducted",
+        "incorrectly deducted", "fraudulently deducted",
+        "charged without notice", "charged without my consent",
+        "charged without permission", "charged without intimation",
+        "not authorized", "chargeback",
+        # Duplicate debits
+        "double debit", "duplicate debit", "double deduction",
+        "duplicate charge", "charged twice", "debited twice",
+        # Refund context
+        "requesting a refund", "request a refund", "refund of ₹",
+        "refund of rs", "refund the amount", "amount not refunded",
+        "refund not received", "refund pending", "refund not processed",
+        # Insurance mis-selling
+        "insurance deducted", "premium deducted without", "insurance charged",
+        # Reward / cashback not received
+        "cashback not received", "reward points not credited",
+        "offer not applied", "discount not applied",
+    ]):
+        return 1
+
+    # ── Tier 1 — Fraud / security concerns ───────────────────────────────────
+    if any(kw in t for kw in [
+        "my account was hacked", "account hacked", "account compromised",
+        "someone accessed my account", "unknown transaction",
+        "suspicious transaction", "fraudulent transaction",
+        "phishing", "vishing", "sim swap", "sim swapped",
+        "card cloned", "card skimmed", "skimming",
+        "otp shared unknowingly", "cyber fraud",
+        "lost my card", "card stolen", "card misused",
+        "mobile banking fraud", "net banking fraud",
+    ]):
         return 1
 
     return 0

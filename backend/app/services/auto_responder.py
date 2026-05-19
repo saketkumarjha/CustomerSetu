@@ -21,6 +21,9 @@ Flow:
 """
 
 import logging
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -191,28 +194,82 @@ def _simulate_send_to_customer(
     complaint_id: str,
 ) -> None:
     """
-    POC: simulate customer send via console output.
-
-    Production replacement:
-      channel == "email"     → SendGrid / SES
-      channel == "whatsapp"  → Twilio WhatsApp Business API
-      channel == "sms"       → Twilio SMS
-      channel == "web"       → WebSocket / push notification
+    Dispatch response to customer.
+      email     → Gmail SMTP (real send)
+      whatsapp  → Twilio (not yet wired — console log)
+      sms       → Twilio (not yet wired — console log)
+      web       → console log
     """
-    gateway = {
-        "email":     "SendGrid Email",
-        "whatsapp":  "Twilio WhatsApp",
-        "sms":       "Twilio SMS",
-    }.get(channel, "Web Notification")
+    if channel == "email":
+        _send_email_reply(
+            to_email=customer_id,
+            complaint_id=complaint_id,
+            response_text=draft_response,
+            send_type=send_type,
+        )
+        return
 
+    gateway = {"whatsapp": "Twilio WhatsApp", "sms": "Twilio SMS"}.get(
+        channel, "Web Notification"
+    )
     print(f"\n{'='*60}")
     print(f"[AUTO-SEND] Type        : {send_type}")
     print(f"[AUTO-SEND] Complaint   : {complaint_id}")
     print(f"[AUTO-SEND] Customer    : {customer_id}")
     print(f"[AUTO-SEND] Channel     : {channel}")
     print(f"[AUTO-SEND] Preview     : {draft_response[:120]}...")
-    print(f"[AUTO-SEND] Gateway     : {gateway}")
+    print(f"[AUTO-SEND] Gateway     : {gateway} (simulated)")
     print(f"{'='*60}\n")
+
+
+def _send_email_reply(
+    to_email: str,
+    complaint_id: str,
+    response_text: str,
+    send_type: str,
+) -> None:
+    """
+    Send a real email reply to the customer via Gmail SMTP.
+    to_email is the customer's address (set by email_poller as customer_id).
+    Falls back to console log if SMTP credentials are not configured.
+    """
+    from app.core.config import get_settings
+    settings = get_settings()
+
+    if not settings.smtp_user or not settings.smtp_password:
+        logger.warning(
+            "[EMAIL] SMTP not configured — cannot send reply to %s for %s",
+            to_email, complaint_id,
+        )
+        return
+
+    subject = f"Re: Your Complaint Reference {complaint_id} — Union Bank of India"
+    from_addr = settings.email_from_address or settings.smtp_user
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"]    = from_addr
+    msg["To"]      = to_email
+
+    msg.attach(MIMEText(response_text, "plain", "utf-8"))
+
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.smtp_user, settings.smtp_password)
+            server.sendmail(from_addr, to_email, msg.as_string())
+        logger.info(
+            "[EMAIL] Reply sent to %s | complaint=%s | type=%s",
+            to_email, complaint_id, send_type,
+        )
+    except smtplib.SMTPAuthenticationError:
+        logger.error(
+            "[EMAIL] SMTP auth failed for %s — check SMTP_USER / SMTP_PASSWORD in .env",
+            settings.smtp_user,
+        )
+    except Exception as exc:
+        logger.error("[EMAIL] Failed to send reply to %s: %s", to_email, exc)
 
 
 def _log_notification(

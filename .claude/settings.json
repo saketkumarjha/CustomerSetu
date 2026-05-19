@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:PYTHONIOENCODING = \"utf-8\"; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Set-Location \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\"; & \"C:\\\\Users\\\\jhasa\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\Scripts\\\\schemathesis.exe\" run http://localhost:8000/openapi.json 2>&1)",
+      "Read(//tmp/**)",
+      "Read(//c/Users/jhasa/AppData/Local/Temp/claude//**)",
+      "PowerShell($env:PYTHONIOENCODING = \"utf-8\"; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Set-Location \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\"; & \"C:\\\\Users\\\\jhasa\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\Scripts\\\\schemathesis.exe\" run http://localhost:8000/openapi.json --phases=coverage 2>&1)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8000/api/v1/complaints/?route=&category=&severity=1&is_rbi_reportable=true&limit=20&offset=1\" -Method Get 2>&1)",
+      "PowerShell($job = Start-Job -ScriptBlock { Set-Location \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\"; python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 2>&1 | Out-File \"$env:TEMP\\\\uvicorn.log\" -Encoding utf8 }; Start-Sleep 5; Invoke-RestMethod -Uri \"http://localhost:8000/health\" -Method Get -ErrorAction SilentlyContinue | ConvertTo-Json)",
+      "PowerShell(Start-Sleep 5; Get-Content \"$env:TEMP\\\\uvicorn.log\" -ErrorAction SilentlyContinue | Select-Object -Last 20)",
+      "PowerShell($p = Start-Process -NoNewWindow -PassThru -FilePath \"python\" -ArgumentList \"-m uvicorn app.main:app --host 0.0.0.0 --port 8000\" -WorkingDirectory \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\" -RedirectStandardError \"$env:TEMP\\\\uv_err.txt\" -RedirectStandardOutput \"$env:TEMP\\\\uv_out.txt\"; Start-Sleep 8; if \\($p.HasExited\\) { \"EXITED: \" + $p.ExitCode; Get-Content \"$env:TEMP\\\\uv_err.txt\" -ErrorAction SilentlyContinue } else { try { $r = Invoke-RestMethod -Uri \"http://localhost:8000/health\" -Method Get; $r | ConvertTo-Json } catch { \"Not ready: $_\" } })",
+      "PowerShell(Get-Content \"$env:TEMP\\\\uv_err.txt\" -ErrorAction SilentlyContinue | Select-Object -Last 30)",
+      "PowerShell(Get-Content \"$env:TEMP\\\\uv_out.txt\" -ErrorAction SilentlyContinue | Select-Object -Last 30)",
+      "PowerShell(Set-Location \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\"; Start-Process -NoNewWindow -FilePath \"cmd.exe\" -ArgumentList \"/c python -m uvicorn app.main:app --port 8000 > $env:TEMP\\\\uv2.txt 2>&1\"; Start-Sleep 10; Get-Content \"$env:TEMP\\\\uv2.txt\" -ErrorAction SilentlyContinue | Select-Object -Last 10; $null = Invoke-RestMethod -Uri \"http://localhost:8000/health\" -ErrorAction SilentlyContinue; if \\($?\\) { \"Server up\" } else { \"Server down\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:8000/api/v1/complaints/?route=&category=&severity=1&is_rbi_reportable=true&limit=20&offset=1\" -Method Get -ErrorAction Stop; \"Status: \" + $r.StatusCode; $r.Content | Select-Object -First 500 } catch { \"Error: \" + $_.Exception.Response.StatusCode.value__ + \" | \" + $_.Exception.Message + \" | \" + $_.ErrorDetails.Message })",
+      "PowerShell(Get-Content \"$env:TEMP\\\\uv2.txt\" -ErrorAction SilentlyContinue | Select-Object -Last 30)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 2; Set-Location \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\"; Start-Process -NoNewWindow -FilePath \"cmd.exe\" -ArgumentList \"/c python -m uvicorn app.main:app --port 8000 > $env:TEMP\\\\uv3.txt 2>&1\"; Start-Sleep 8; try { $r = Invoke-RestMethod -Uri \"http://localhost:8000/health\"; $r | ConvertTo-Json } catch { \"Not ready: $_\" })",
+      "PowerShell(Get-Content \"$env:TEMP\\\\uv3.txt\" -ErrorAction SilentlyContinue | Select-Object -Last 15)",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"http://127.0.0.1:8000/health\"; $r | ConvertTo-Json } catch { \"Error: $_\" })",
+      "PowerShell($env:PYTHONIOENCODING = \"utf-8\"; [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Set-Location \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\"; & \"C:\\\\Users\\\\jhasa\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\Scripts\\\\schemathesis.exe\" run http://127.0.0.1:8000/openapi.json --phases=coverage 2>&1)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep 2; Set-Location \"c:\\\\Users\\\\jhasa\\\\OneDrive\\\\Desktop\\\\complaint-dashboard\\\\Anijeet\\\\backend\"; Start-Process -NoNewWindow -FilePath \"cmd.exe\" -ArgumentList \"/c python -m uvicorn app.main:app --port 8000 > $env:TEMP\\\\uv4.txt 2>&1\"; Start-Sleep 8; try { $r = Invoke-RestMethod -Uri \"http://127.0.0.1:8000/health\"; \"Server up: \" + \\($r | ConvertTo-Json\\) } catch { \"Not up: $_\" })",
+      "PowerShell(Get-Content \"$env:TEMP\\\\uv4.txt\" -ErrorAction SilentlyContinue | Select-Object -Last 10)",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"http://127.0.0.1:8000/health\"; \"Up\"; $r | ConvertTo-Json } catch { \"Down: $_\" })",
+      "PowerShell(Stop-Process -Id 23464 -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(netstat -ano)",
+      "Bash(venv\\\\Scripts\\\\python.exe -c \"from app.api.v1.routes.settings import is_auto_pipeline_enabled; print\\('OK'\\)\")",
+      "Read(//c/Users/jhasa/.claude/projects/c--Users-jhasa-OneDrive-Desktop-complaint-dashboard-Anijeet/**)"
+    ]
+  }
+}

@@ -937,6 +937,10 @@ async def routing_node(state: PipelineState) -> dict:
                 "stop_reason": esc_orchestrator_result.get("stop_reason"),
                 "final_tier": final_tier,
             }
+            # Propagate escalation counters into pipeline state so _save_pipeline_outputs
+            # does not overwrite them with the stale initial values (0 and []).
+            escalation_count_out = esc_orchestrator_result.get("total_escalations", 0)
+            escalation_path_out  = esc_orchestrator_result.get("escalation_path", [])
 
     elif route == "HUMAN":
         # Override triggered — direct to tier_hint (fraud → 4, others → 4 default)
@@ -944,8 +948,6 @@ async def routing_node(state: PipelineState) -> dict:
         response_tier = "human_review"
 
         # ── Insert into agent_queue so the complaint appears in Agent Desk ──
-        # This was the missing step — without it tier_pending_at stays null
-        # and the queue API never sees the complaint.
         try:
             from app.services.queue_service import assign_to_queue
             queue_result = assign_to_queue(
@@ -990,6 +992,10 @@ async def routing_node(state: PipelineState) -> dict:
         "assigned_tier":              _final_tier,
         "current_tier":               _final_tier,
         "escalation_decision":        escalation_decision,
+        # Escalation counters — populated from orchestrator so _save_pipeline_outputs
+        # writes the real values instead of the initial-state zeros.
+        "escalation_count":           locals().get("escalation_count_out", state.get("escalation_count", 0)),
+        "escalation_path":            locals().get("escalation_path_out", state.get("escalation_path", [])),
         # Auto-response tracking fields (populated when route == "AUTO" or orchestrator auto-responds)
         "formatted_response":         formatted_response,
         "notification_channel":       notification_channel,

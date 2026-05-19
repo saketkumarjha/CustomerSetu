@@ -1,13 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import {
-  Menu,
-  X,
-  Bell,
-  ChevronDown,
-  ArrowRight,
-  User,
-} from "lucide-react";
+import { Menu, X, Bell, ChevronDown, ArrowRight, User } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,10 +32,9 @@ export function AppHeader(props: Props) {
   const location = useLocation();
   const isLanding = props.variant === "landing";
 
-  const mobileMenuOpen =
-    isLanding
-      ? mobileOpen
-      : (props as DashboardProps).sidebarOpen;
+  const mobileMenuOpen = isLanding
+    ? mobileOpen
+    : (props as DashboardProps).sidebarOpen;
 
   function handleHamburger() {
     if (isLanding) {
@@ -60,7 +52,6 @@ export function AppHeader(props: Props) {
         }`}
       >
         <div className="w-full px-4 md:px-6 flex items-center justify-between h-16">
-
           {/* ── Left ── */}
           <div className="flex items-center gap-3 min-w-0">
             {/* Hamburger */}
@@ -123,7 +114,6 @@ export function AppHeader(props: Props) {
 
           {/* ── Right ── */}
           <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-
             {/* Bell — dashboard only */}
             {!isLanding && (
               <div className="relative cursor-pointer">
@@ -157,8 +147,8 @@ export function AppHeader(props: Props) {
                   RM
                 </div>
                 <div className="hidden md:block text-xs leading-tight">
-                  <div className="text-gray-900 font-semibold">Rajiv Menon</div>
-                  <div className="text-gray-400">Sr. Relationship Manager</div>
+                  <div className="text-gray-900 font-semibold">Rishi</div>
+                  <div className="text-gray-400">Team Berlin</div>
                 </div>
                 <ChevronDown
                   size={14}

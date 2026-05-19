@@ -1,9 +1,10 @@
-from fastapi import HTTPException, status
+from fastapi import status
+from fastapi.responses import JSONResponse
 from app.db.supabase_client import get_supabase
 import json
 
 
-async def check_idempotency(idempotency_key: str) -> dict | None:
+async def check_idempotency(idempotency_key: str) -> dict | JSONResponse | None:
     """
     Check if this idempotency key has been seen before.
 
@@ -43,35 +44,54 @@ async def check_idempotency(idempotency_key: str) -> dict | None:
         # Already processed — return cached response
         return record["response_cache"]
 
-    # Key exists but no cached response yet — still processing
-    raise HTTPException(
+    # Key exists but no cached response yet — still processing.
+    # Return a JSONResponse directly: 202 is a success code, not an error,
+    # so raising HTTPException (which always formats as {"detail": ...}) is wrong.
+    return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
-        detail={
+        content={
             "message": "Complaint is still being processed.",
             "complaint_id": record["complaint_id"],
-            "status": "processing"
-        }
+            "status": "processing",
+        },
     )
 
 
 async def store_idempotency_key(
     idempotency_key: str,
     complaint_id: str
-) -> None:
+) -> bool:
     """
     Store the idempotency key immediately when complaint is created.
     response_cache is NULL until pipeline completes.
+
+    Uses upsert (on_conflict=ignore) so that a simultaneous duplicate request
+    that races past check_idempotency() does not create a second complaint row.
+    The second caller hits the DB unique constraint, this insert is ignored,
+    and the complaint_id written by the first caller is preserved.
+
+    Returns True if this was the first writer, False if the key already existed.
+
+    NOTE: requires a UNIQUE constraint on idempotency_keys.key in the DB schema.
+    Run this migration if not already present:
+        ALTER TABLE idempotency_keys ADD CONSTRAINT idempotency_keys_key_unique UNIQUE (key);
     """
     supabase = get_supabase()
     try:
-        supabase.table("idempotency_keys").insert({
-            "key": idempotency_key,
-            "complaint_id": complaint_id,
-            "response_cache": None
-        }).execute()
+        result = (
+            supabase.table("idempotency_keys")
+            .upsert(
+                {"key": idempotency_key, "complaint_id": complaint_id, "response_cache": None},
+                on_conflict="key",
+                ignore_duplicates=True,
+            )
+            .execute()
+        )
+        # If data is empty the row already existed (duplicate was ignored)
+        return bool(result.data)
     except Exception as e:
-        # Non-fatal — log and continue
         print(f"[IDEMPOTENCY] Failed to store key: {e}")
+        return True  # assume first writer — do not block the complaint
 
 
 async def cache_idempotency_response(

@@ -1,8 +1,8 @@
-import { Bell, ChevronDown, Menu, X } from 'lucide-react'
+import { Bell, ChevronDown, Menu, X } from "lucide-react";
 
 interface Props {
-  sidebarOpen: boolean
-  onMenuToggle: () => void
+  sidebarOpen: boolean;
+  onMenuToggle: () => void;
 }
 
 export function Header({ sidebarOpen, onMenuToggle }: Props) {
@@ -51,12 +51,15 @@ export function Header({ sidebarOpen, onMenuToggle }: Props) {
             RM
           </div>
           <div className="text-xs leading-tight hidden md:block">
-            <div className="text-white font-semibold">Rajiv Menon</div>
-            <div className="text-blue-300">Sr. Relationship Manager</div>
+            <div className="text-white font-semibold">Rishi</div>
+            <div className="text-blue-300">Team Berlin</div>
           </div>
-          <ChevronDown size={14} className="text-blue-300 group-hover:text-white transition-colors hidden md:block" />
+          <ChevronDown
+            size={14}
+            className="text-blue-300 group-hover:text-white transition-colors hidden md:block"
+          />
         </div>
       </div>
     </header>
-  )
+  );
 }

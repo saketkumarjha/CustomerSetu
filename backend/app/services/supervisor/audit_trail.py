@@ -87,19 +87,11 @@ async def update_complaint_status(
     supabase = get_supabase()
 
     # Internal pipeline states must NOT overwrite the customer-facing status
+    # or the tier fields — those are managed by _trigger_pipeline_bg before the
+    # pipeline starts, and by the escalation orchestrator during escalation.
     internal_only = {"processing", "started", "failed"}
     if status in internal_only:
-        update_data: dict = {
-            "pipeline_status": status,
-            # Anchor tier fields so the DB trigger cannot use wrong defaults
-            "current_tier": 0,
-            "assigned_tier": 1,
-            "is_escalating": False,
-            "escalation_count": 0,
-            "escalation_path": [],
-            "max_tier_reached": 0,
-            "total_escalations_count": 0,
-        }
+        update_data: dict = {"pipeline_status": status}
     else:
         update_data = {"pipeline_status": status, "status": status}
 

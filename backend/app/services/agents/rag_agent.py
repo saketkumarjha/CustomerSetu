@@ -107,10 +107,14 @@ async def retrieve_knowledge(
 
     # Calculate similarity and sort
     def cosine_similarity(a, b):
-        import numpy as np
-        a = np.array(a)
-        b = np.array(b)
-        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+        import numpy as np, json
+        if isinstance(a, str):
+            a = json.loads(a)
+        if isinstance(b, str):
+            b = json.loads(b)
+        a, b = np.array(a, dtype=float), np.array(b, dtype=float)
+        denom = np.linalg.norm(a) * np.linalg.norm(b)
+        return float(np.dot(a, b) / denom) if denom > 0 else 0.0
 
     for doc in all_results:
         doc["similarity"] = cosine_similarity(embedding, doc["embedding"])
@@ -182,9 +186,14 @@ def retrieve_context(
     supabase = get_supabase()
 
     import numpy as np
+    import json
 
     def _cosine(a, b):
-        a, b = np.array(a), np.array(b)
+        if isinstance(a, str):
+            a = json.loads(a)
+        if isinstance(b, str):
+            b = json.loads(b)
+        a, b = np.array(a, dtype=float), np.array(b, dtype=float)
         denom = np.linalg.norm(a) * np.linalg.norm(b)
         return float(np.dot(a, b) / denom) if denom > 0 else 0.0
 

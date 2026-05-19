@@ -6,12 +6,17 @@ GET /api/v1/sla/predict/{id} — Prediction for a single complaint
 GET /api/v1/sla/summary      — Overall SLA health dashboard
 """
 
-from fastapi import APIRouter, Query
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query, Path
 from datetime import datetime, timezone
 from app.db.supabase_client import get_supabase
 from app.services.sla_predictor import predict_sla_breach
 
 router = APIRouter()
+
+# Single source of truth for routes that count as "human review / needs attention".
+# Both /at-risk and /summary must use this constant so their counts stay in sync.
+HUMAN_REVIEW_ROUTES = ["HUMAN", "human_review", "ESCALATE", "escalate", "escalation_human_review"]
 
 
 @router.get(
@@ -21,11 +26,14 @@ router = APIRouter()
 async def get_sla_at_risk(
     risk_threshold: float = Query(
         default=0.70,
+        ge=0.0,
+        le=1.0,
         description="Minimum breach probability to include (0.0-1.0)"
     ),
-    include_low: bool = Query(
-        default=False,
-        description="Include LOW risk complaints in results"
+    include_low: Optional[str] = Query(
+        default=None,
+        description="Include LOW risk complaints in results (true/false)",
+        pattern="^(true|false|null)$"
     ),
 ):
     """
@@ -51,13 +59,14 @@ async def get_sla_at_risk(
             "created_at, route, status, rbi_tat_deadline, "
             "compliance_category, is_rbi_reportable, channel"
         )
-        .in_("route", ["HUMAN", "human_review", "ESCALATE", "escalate"])
+        .in_("route", HUMAN_REVIEW_ROUTES)
         .eq("pipeline_status", "complete")
         .not_.in_("status", ["closed", "resolved", "auto_closed"])
         .execute()
     )
 
     complaints = result.data or []
+    include_low_bool = include_low is not None and include_low.lower() == "true"
 
     if not complaints:
         return {
@@ -85,12 +94,12 @@ async def get_sla_at_risk(
             current_queue_depth=queue_depth,
         )
 
-        # Filter by threshold
-        if not include_low and prediction["risk_level"] == "LOW":
+        # Filter by threshold — LOW is excluded unless include_low=True.
+        # Additionally apply the numeric risk_threshold to MODERATE predictions.
+        if prediction["risk_level"] == "LOW" and not include_low_bool:
             continue
-        if prediction["breach_probability"] < risk_threshold and include_low is False:
-            if prediction["risk_level"] not in ("MODERATE", "HIGH", "CRITICAL"):
-                continue
+        if prediction["risk_level"] == "MODERATE" and prediction["breach_probability"] < risk_threshold:
+            continue
 
         predictions.append({
             **prediction,
@@ -123,8 +132,9 @@ async def get_sla_at_risk(
 @router.get(
     "/predict/{complaint_id}",
     summary="SLA breach prediction for a single complaint",
+    responses={404: {"description": "Complaint not found"}},
 )
-async def predict_single_complaint(complaint_id: str):
+async def predict_single_complaint(complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)")):
     """
     Returns detailed SLA breach prediction for one complaint.
     Includes full signal breakdown for transparency (XAI).
@@ -153,7 +163,7 @@ async def predict_single_complaint(complaint_id: str):
     queue_result = (
         supabase.table("complaints")
         .select("complaint_id", count="exact")
-        .in_("route", ["HUMAN", "human_review", "ESCALATE", "escalate"])
+        .in_("route", HUMAN_REVIEW_ROUTES)
         .eq("pipeline_status", "complete")
         .not_.in_("status", ["closed", "resolved", "auto_closed"])
         .execute()
@@ -208,9 +218,10 @@ async def get_sla_summary():
     )
 
     open_complaints = open_result.data or []
+    _route_set = set(HUMAN_REVIEW_ROUTES)
     queue_depth = len([
         c for c in open_complaints
-        if (c.get("route") or "").upper() in ("HUMAN", "HUMAN_REVIEW", "ESCALATE")
+        if (c.get("route") or "") in _route_set
     ])
 
     # Count RBI TAT breaches
@@ -233,7 +244,7 @@ async def get_sla_summary():
     # Run predictions on human_review complaints
     human_review = [
         c for c in open_complaints
-        if (c.get("route") or "").upper() in ("HUMAN", "HUMAN_REVIEW", "ESCALATE")
+        if (c.get("route") or "") in _route_set
     ]
     critical_count = 0
     high_count = 0
@@ -254,7 +265,7 @@ async def get_sla_summary():
 
     return {
         "generated_at": now.isoformat(),
-        "overall_health": _overall_health(critical_count, rbi_breached),
+        "overall_health": _overall_health(critical_count, rbi_breached, high_count),
         "open_complaints": len(open_complaints),
         "human_review_queue": queue_depth,
         "rbi_tat_breached": rbi_breached,
@@ -284,7 +295,9 @@ def _build_system_alert(risk_summary: dict) -> str | None:
     return None
 
 
-def _overall_health(critical: int, rbi_breached: int) -> str:
+def _overall_health(critical: int, rbi_breached: int, high: int = 0) -> str:
     if critical > 0 or rbi_breached > 0:
         return "CRITICAL"
+    if high > 0:
+        return "AT_RISK"
     return "HEALTHY"

@@ -30,7 +30,11 @@ def _get_client() -> OpenAI:
     global _client
     if _client is None:
         settings = get_settings()
-        _client = OpenAI(api_key=settings.openai_api_key)
+        _client = OpenAI(
+            api_key=settings.openai_api_key,
+            timeout=60.0,    # 60s total — GPT-4o fan-out agents are parallel, keep generous
+            max_retries=1,   # one automatic retry on transient 5xx, then fail fast
+        )
     return _client
 
 

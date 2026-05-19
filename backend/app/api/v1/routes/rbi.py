@@ -13,8 +13,24 @@ For POC: returns structured JSON.
 For Production: generates PDF and submits to RBI SCORES API.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Path, status
 from datetime import datetime, timezone, timedelta
+
+
+def _parse_date_param(value: str, param_name: str) -> str:
+    """Validate and normalise an ISO date query parameter, raising 422 on bad input."""
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return value
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=[{
+                "loc": ["query", param_name],
+                "msg": f"Invalid {param_name} format. Expected ISO 8601 (e.g. '2025-01-01T00:00:00Z').",
+                "type": "value_error.datetime",
+            }],
+        )
 from app.db.supabase_client import get_supabase
 from app.services.rbi.categories import (
     RBICategory,
@@ -63,8 +79,12 @@ async def get_rbi_report(
     if not from_date:
         from_dt = now - timedelta(days=30)
         from_date = from_dt.isoformat()
+    else:
+        from_date = _parse_date_param(from_date, "from_date")
     if not to_date:
         to_date = now.isoformat()
+    else:
+        to_date = _parse_date_param(to_date, "to_date")
 
     # Fetch all complaints in date range
     all_result = (
@@ -187,7 +207,9 @@ async def get_rbi_report(
 async def get_pending_rbi_complaints(
     hours_threshold: int = Query(
         default=24,
-        description="Alert threshold — flag complaints with TAT deadline within this many hours"
+        ge=1,
+        le=720,
+        description="Alert threshold — flag complaints with TAT deadline within this many hours (1–720)"
     ),
 ):
     """
@@ -305,8 +327,13 @@ async def get_rbi_categories():
     "/log/{complaint_id}",
     summary="Mark complaint as reported to RBI",
     status_code=status.HTTP_200_OK,
+    responses={
+        404: {"description": "Complaint not found"},
+        409: {"description": "Complaint is not RBI-reportable"},
+        500: {"description": "Database error inserting RBI log entry"},
+    },
 )
-async def mark_as_rbi_reported(complaint_id: str):
+async def mark_as_rbi_reported(complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)")):
     """
     Mark a complaint as formally reported to RBI SCORES portal.
     In production: this would also trigger the actual SCORES API submission.
@@ -332,9 +359,26 @@ async def mark_as_rbi_reported(complaint_id: str):
 
     if not complaint.get("is_rbi_reportable"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail=f"Complaint {complaint_id} is not RBI-reportable."
         )
+
+    # Guard against duplicate log entries — return 200 (idempotent) if already logged
+    existing_log = (
+        supabase.table("rbi_reportable_log")
+        .select("complaint_id, reported_at")
+        .eq("complaint_id", complaint_id)
+        .limit(1)
+        .execute()
+    )
+    if existing_log.data:
+        return {
+            "complaint_id": complaint_id,
+            "rbi_category": complaint.get("compliance_category"),
+            "reported_at": existing_log.data[0].get("reported_at"),
+            "status": "already_logged",
+            "message": f"Complaint {complaint_id} was already reported to RBI.",
+        }
 
     # Insert into rbi_reportable_log
     now = datetime.now(timezone.utc)

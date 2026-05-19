@@ -803,7 +803,7 @@ function ImportSection() {
   const [validating, setValidating] = useState(false)
   const [importing, setImporting] = useState(false)
   const [validateResult, setValidateResult] = useState<KBBulkValidateResult | null>(null)
-  const [importResult, setImportResult] = useState<{ imported?: number; errors?: number } | null>(null)
+  const [importResult, setImportResult] = useState<{ total_rows?: number; successful?: number; failed?: number } | null>(null)
   const [err, setErr] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -900,7 +900,7 @@ function ImportSection() {
       {importResult && (
         <div className="glass-panel p-4 border border-emerald-200 bg-emerald-50/40">
           <div className="flex items-center gap-2 mb-2"><CheckCircle2 size={16} className="text-emerald-500" /><p className="text-sm font-semibold text-emerald-700">Import Complete</p></div>
-          <p className="text-xs text-slate-600">{importResult.imported ?? '?'} entries imported · {importResult.errors ?? 0} errors</p>
+          <p className="text-xs text-slate-600">{importResult.successful ?? '?'} entries imported · {importResult.failed ?? 0} errors</p>
         </div>
       )}
 

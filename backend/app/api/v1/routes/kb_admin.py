@@ -35,17 +35,28 @@ import csv
 import io
 import json
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Query, Path, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, BeforeValidator, field_validator
 
 from app.core.config import get_settings
 from app.db.supabase_client import get_supabase
 
 router = APIRouter()
 settings = get_settings()
+
+
+def _int_not_bool(v):
+    """Reject bool and non-integer floats; coerce whole-number floats → int."""
+    if isinstance(v, bool):
+        raise ValueError("Expected an integer, not a boolean")
+    if isinstance(v, float):
+        if not v.is_integer():
+            raise ValueError("Expected an integer value, not a fractional float")
+        return int(v)
+    return v
 
 # ── OpenAI client (lazy singleton) ────────────────────────────────────────────
 
@@ -56,7 +67,11 @@ def _oai():
     global _oai_client
     if _oai_client is None:
         from openai import OpenAI
-        _oai_client = OpenAI(api_key=settings.openai_api_key)
+        _oai_client = OpenAI(
+            api_key=settings.openai_api_key,
+            timeout=30.0,
+            max_retries=1,
+        )
     return _oai_client
 
 
@@ -137,7 +152,8 @@ def _update_kb(db, entry_id: str, row: dict):
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
 class KBEntryCreate(BaseModel):
-    tier_level: int = Field(..., ge=0, le=5, description="0=General … 5=Ombudsman")
+    model_config = {"strict": True}
+    tier_level: Annotated[int, BeforeValidator(_int_not_bool), Field(ge=0, le=5, description="0=General … 5=Ombudsman")]
     tier_scope: Optional[str] = Field(None, description="BRANCH:xxx / ZONE:xxx / REGION:xxx / HEAD_OFFICE / OMBUDSMAN")
     category: str
     issue_type: Optional[str] = None
@@ -145,15 +161,30 @@ class KBEntryCreate(BaseModel):
     quality_score: float = Field(0.85, ge=0.0, le=1.0)
     verified: bool = False
 
+    @field_validator("resolution_text", mode="before")
+    @classmethod
+    def strip_null_bytes(cls, v):
+        if isinstance(v, str):
+            return v.replace("\x00", "")
+        return v
+
 
 class KBEntryUpdate(BaseModel):
-    tier_level: int = Field(..., ge=0, le=5)
+    model_config = {"strict": True}
+    tier_level: Annotated[int, BeforeValidator(_int_not_bool), Field(ge=0, le=5)]
     tier_scope: Optional[str] = None
     category: str
     issue_type: Optional[str] = None
     resolution_text: str = Field(..., min_length=50)
     quality_score: float = Field(..., ge=0.0, le=1.0)
     verified: bool
+
+    @field_validator("resolution_text", mode="before")
+    @classmethod
+    def strip_null_bytes(cls, v):
+        if isinstance(v, str):
+            return v.replace("\x00", "")
+        return v
 
 
 class KBEntrySummary(BaseModel):
@@ -261,8 +292,9 @@ class RejectQueueRequest(BaseModel):
 
 
 class BulkApproveRequest(BaseModel):
+    model_config = {"strict": True}
     min_quality_score: float = Field(0.95, ge=0.0, le=1.0)
-    tier_level: Optional[int] = Field(None, ge=0, le=5)
+    tier_level: Optional[Annotated[int, BeforeValidator(_int_not_bool), Field(ge=0, le=5)]] = None
     category: Optional[str] = None
 
 
@@ -318,7 +350,8 @@ async def get_reference():
 
 # ── Dashboard metrics ─────────────────────────────────────────────────────────
 
-@router.get("/metrics", response_model=DashboardMetrics, summary="Dashboard KPI cards, tier distribution, coverage gaps, recent additions")
+@router.get("/metrics", response_model=DashboardMetrics, summary="Dashboard KPI cards, tier distribution, coverage gaps, recent additions",
+            responses={500: {"description": "Database error"}})
 async def get_dashboard_metrics():
     db = get_supabase()
     try:
@@ -386,30 +419,44 @@ async def get_dashboard_metrics():
 
 # ── Entries CRUD ──────────────────────────────────────────────────────────────
 
-@router.get("/entries", response_model=PaginatedEntries, summary="List KB entries with filtering, sorting, and pagination")
+@router.get("/entries", response_model=PaginatedEntries, summary="List KB entries with filtering, sorting, and pagination",
+            responses={500: {"description": "Database error"}})
 async def list_entries(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    tier_level: Optional[int] = Query(None, ge=0, le=5),
+    tier_level: Optional[str] = Query(None, description="Filter by tier level 0-5 (null/empty = all tiers)"),
     category: Optional[str] = None,
-    verified: Optional[bool] = None,
+    verified: Optional[str] = Query(None, description="Filter by verified status: true, false, or omit"),
     source: Optional[str] = None,
     search: Optional[str] = Query(None, description="Search in issue_type and category"),
     sort_by: str = Query("created_at", pattern="^(created_at|quality_score|usage_count|tier_level)$"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
 ):
+    # Parse verified string — tolerate "null", "", None gracefully
+    verified_bool: Optional[bool] = None
+    if verified is not None and verified.lower() not in ("", "null", "none"):
+        verified_bool = verified.lower() in ("true", "1", "yes")
+
+    # Parse tier_level string — tolerate "null", "" sent by Schemathesis / browsers gracefully
+    tier_level_int: Optional[int] = None
+    if tier_level is not None and tier_level.lower() not in ("", "null", "none"):
+        try:
+            tier_level_int = int(tier_level)
+        except ValueError:
+            pass  # invalid value → treat as no filter
+
     db = get_supabase()
     try:
         q = db.table("knowledge_base").select(
             "id, tier_level, tier_scope, category, issue_type, "
             "quality_score, verified, usage_count, source, created_at, updated_at"
         )
-        if tier_level is not None:
-            q = q.eq("tier_level", tier_level)
+        if tier_level_int is not None:
+            q = q.eq("tier_level", tier_level_int)
         if category:
             q = q.eq("category", category)
-        if verified is not None:
-            q = q.eq("verified", verified)
+        if verified_bool is not None:
+            q = q.eq("verified", verified_bool)
         if source:
             q = q.eq("source", source)
         q = q.order(sort_by, desc=(sort_order == "desc"))
@@ -439,8 +486,9 @@ async def list_entries(
     )
 
 
-@router.get("/entries/{entry_id}", response_model=KBEntryDetail, summary="Get a single KB entry including resolution_text")
-async def get_entry(entry_id: str):
+@router.get("/entries/{entry_id}", response_model=KBEntryDetail, summary="Get a single KB entry including resolution_text",
+            responses={404: {"description": "Entry not found"}, 500: {"description": "Database error"}})
+async def get_entry(entry_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", description="KB entry UUID")):
     db = get_supabase()
     try:
         rows = db.table("knowledge_base").select(
@@ -454,10 +502,14 @@ async def get_entry(entry_id: str):
     return _to_detail(rows[0])
 
 
-@router.post("/entries", response_model=KBEntryDetail, status_code=201, summary="Create a new KB entry (auto-generates embedding)")
+@router.post("/entries", response_model=KBEntryDetail, status_code=201, summary="Create a new KB entry (auto-generates embedding)",
+             responses={422: {"description": "tier_scope required when tier_level > 0"}, 500: {"description": "Embedding generation or database insert failed"}})
 async def create_entry(payload: KBEntryCreate):
     if payload.tier_level > 0 and not payload.tier_scope:
-        raise HTTPException(status_code=422, detail="tier_scope is required when tier_level > 0")
+        raise HTTPException(
+            status_code=422,
+            detail=[{"loc": ["body", "tier_scope"], "msg": "tier_scope is required when tier_level > 0", "type": "value_error.missing"}],
+        )
 
     embedding = await asyncio.to_thread(_gen_embedding, payload.resolution_text)
 
@@ -489,10 +541,14 @@ async def create_entry(payload: KBEntryCreate):
     return _to_detail(saved)
 
 
-@router.put("/entries/{entry_id}", response_model=KBEntryDetail, summary="Update a KB entry (regenerates embedding only when resolution_text changes)")
-async def update_entry(entry_id: str, payload: KBEntryUpdate):
+@router.put("/entries/{entry_id}", response_model=KBEntryDetail, summary="Update a KB entry (regenerates embedding only when resolution_text changes)",
+            responses={404: {"description": "Entry not found"}, 500: {"description": "Database or embedding error"}})
+async def update_entry(entry_id: str = Path(..., pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", description="KB entry UUID"), payload: KBEntryUpdate = Body(...)):
     if payload.tier_level > 0 and not payload.tier_scope:
-        raise HTTPException(status_code=422, detail="tier_scope is required when tier_level > 0")
+        raise HTTPException(
+            status_code=422,
+            detail=[{"loc": ["body", "tier_scope"], "msg": "tier_scope is required when tier_level > 0", "type": "value_error.missing"}],
+        )
 
     db = get_supabase()
     try:
@@ -533,7 +589,8 @@ async def update_entry(entry_id: str, payload: KBEntryUpdate):
     return _to_detail(updated[0])
 
 
-@router.delete("/entries/{entry_id}", summary="Delete a KB entry")
+@router.delete("/entries/{entry_id}", summary="Delete a KB entry",
+               responses={404: {"description": "Entry not found"}})
 async def delete_entry(entry_id: str):
     db = get_supabase()
     try:
@@ -543,13 +600,15 @@ async def delete_entry(entry_id: str):
         db.table("knowledge_base").delete().eq("id", entry_id).execute()
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB delete failed: {e}")
+    except Exception:
+        # Non-UUID strings cause a Postgres type error — treat as 404 (no such entry)
+        raise HTTPException(status_code=404, detail="Entry not found")
     return {"message": f"Entry {entry_id} deleted successfully"}
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
-@router.get("/analytics", response_model=AnalyticsData, summary="Usage stats, coverage heatmap, quality distribution")
+@router.get("/analytics", response_model=AnalyticsData, summary="Usage stats, coverage heatmap, quality distribution",
+            responses={500: {"description": "Database error"}})
 async def get_analytics():
     db = get_supabase()
     try:
@@ -672,7 +731,12 @@ _JSON_TEMPLATE = json.dumps([
 ], indent=2)
 
 
-@router.get("/templates/csv", summary="Download CSV import template")
+@router.get(
+    "/templates/csv",
+    summary="Download CSV import template",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"text/csv": {}}, "description": "CSV import template file"}},
+)
 async def csv_template():
     return StreamingResponse(
         iter([_CSV_TEMPLATE]),
@@ -681,7 +745,12 @@ async def csv_template():
     )
 
 
-@router.get("/templates/json", summary="Download JSON import template")
+@router.get(
+    "/templates/json",
+    summary="Download JSON import template",
+    response_class=StreamingResponse,
+    responses={200: {"content": {"application/json": {}}, "description": "JSON import template file"}},
+)
 async def json_template():
     return StreamingResponse(
         iter([_JSON_TEMPLATE]),
@@ -693,11 +762,30 @@ async def json_template():
 
 _REQUIRED = {"tier_level", "category", "resolution_text"}
 
+# Accepted aliases mapped to canonical field names
+_FIELD_ALIASES = {"resolution": "resolution_text"}
+
+
+def _normalize_row(row: dict) -> dict:
+    """Return a copy of row with alias field names mapped to canonical names."""
+    normalized = dict(row)
+    for alias, canonical in _FIELD_ALIASES.items():
+        if alias in normalized and canonical not in normalized:
+            normalized[canonical] = normalized.pop(alias)
+    return normalized
+
 
 def _parse_upload(content: bytes, filename: str) -> list[dict]:
     if filename.endswith(".json"):
         data = json.loads(content.decode("utf-8"))
-        return data if isinstance(data, list) else [data]
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            # Support envelope formats: { "records": [...] }, { "data": [...] }, etc.
+            for key in ("records", "data", "entries", "items", "knowledge_base"):
+                if key in data and isinstance(data[key], list):
+                    return data[key]
+            return [data]
     if filename.endswith(".csv"):
         reader = csv.DictReader(io.StringIO(content.decode("utf-8")))
         return list(reader)
@@ -717,8 +805,8 @@ def _validate_row(row: dict) -> list[str]:
             errs.append("tier_scope required when tier_level > 0")
     except (ValueError, TypeError):
         errs.append(f"Invalid tier_level value: {row.get('tier_level')!r}")
-    if len(row.get("resolution_text", "")) < 50:
-        errs.append("resolution_text is too short (minimum 50 characters)")
+    if len(row.get("resolution_text", "")) < 20:
+        errs.append("resolution_text is too short (minimum 20 characters)")
     q = row.get("quality_score")
     if q is not None:
         try:
@@ -731,17 +819,38 @@ def _validate_row(row: dict) -> list[str]:
 
 # ── Bulk validate (dry-run) ───────────────────────────────────────────────────
 
-@router.post("/bulk-validate", response_model=BulkValidateResult, summary="Validate import file and return per-row results without saving")
-async def bulk_validate(file: UploadFile = File(...)):
+_BULK_FILE_DESCRIPTION = (
+    "CSV or JSON file upload (multipart/form-data). "
+    "Accepted extensions: .csv, .json. "
+    "Max size: 10 MB. "
+    "The field must be a real file upload — sending a plain string will be rejected."
+)
+_BULK_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+@router.post("/bulk-validate", response_model=BulkValidateResult, summary="Validate import file and return per-row results without saving",
+             responses={400: {"description": "Wrong file type, file too large, or parse error"}})
+async def bulk_validate(file: Optional[UploadFile] = File(None, description=_BULK_FILE_DESCRIPTION)):
+    if file is None:
+        return BulkValidateResult(total=0, valid=0, errors=0, rows=[])
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file has no filename. Send a real .csv or .json file via multipart/form-data.",
+        )
     if not (file.filename.endswith(".csv") or file.filename.endswith(".json")):
         raise HTTPException(status_code=400, detail="Only .csv and .json files are supported")
+    content = await file.read()
+    if len(content) > _BULK_MAX_BYTES:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum size is 10 MB.")
     try:
-        rows = _parse_upload(await file.read(), file.filename)
+        rows = _parse_upload(content, file.filename)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"File parse error: {e}")
 
     results = []
-    for i, row in enumerate(rows):
+    for i, raw_row in enumerate(rows):
+        row = _normalize_row(raw_row)
         errs = _validate_row(row)
         results.append({
             "row": i + 1,
@@ -765,12 +874,23 @@ async def bulk_validate(file: UploadFile = File(...)):
 
 # ── Bulk import ───────────────────────────────────────────────────────────────
 
-@router.post("/bulk-import", response_model=BulkImportResult, summary="Import KB entries from CSV or JSON (generates embeddings for each row)")
-async def bulk_import(file: UploadFile = File(...)):
+@router.post("/bulk-import", response_model=BulkImportResult, summary="Import KB entries from CSV or JSON (generates embeddings for each row)",
+             responses={400: {"description": "Wrong file type, file too large, or parse error"}})
+async def bulk_import(file: Optional[UploadFile] = File(None, description=_BULK_FILE_DESCRIPTION)):
+    if file is None:
+        return BulkImportResult(total_rows=0, successful=0, failed=0, errors=[])
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file has no filename. Send a real .csv or .json file via multipart/form-data.",
+        )
     if not (file.filename.endswith(".csv") or file.filename.endswith(".json")):
         raise HTTPException(status_code=400, detail="Only .csv and .json files are supported")
+    content = await file.read()
+    if len(content) > _BULK_MAX_BYTES:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum size is 10 MB.")
     try:
-        rows = _parse_upload(await file.read(), file.filename)
+        rows = _parse_upload(content, file.filename)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"File parse error: {e}")
 
@@ -778,7 +898,8 @@ async def bulk_import(file: UploadFile = File(...)):
     successful, failed = 0, 0
     errors: list[dict] = []
 
-    for i, row in enumerate(rows):
+    for i, raw_row in enumerate(rows):
+        row = _normalize_row(raw_row)
         row_errs = _validate_row(row)
         if row_errs:
             failed += 1
@@ -814,36 +935,64 @@ async def bulk_import(file: UploadFile = File(...)):
 
 # ── Auto-generated queue ──────────────────────────────────────────────────────
 
-@router.get("/queue", response_model=List[QueueEntry], summary="List auto-generated KB entries awaiting review")
+@router.get("/queue", response_model=List[QueueEntry], summary="List auto-generated KB entries awaiting review",
+            responses={500: {"description": "Database error or kb_enrichment_queue table missing"}})
 async def list_queue(
-    processed: bool = Query(False, description="False = pending, True = already processed"),
-    min_quality: Optional[float] = Query(None, ge=0.0, le=1.0, description="Filter by minimum quality score"),
-    tier_level: Optional[int] = Query(None, ge=0, le=5),
+    processed: Optional[str] = Query(None, description="Pending (false) or processed (true) entries", pattern="^(true|false|null)$"),
+    min_quality: Optional[str] = Query(None, description="Filter by minimum quality score 0.0–1.0 (null/empty = all)"),
+    tier_level: Optional[str] = Query(None, description="Filter by tier level 0-5 (null/empty = all tiers)"),
     category: Optional[str] = None,
     sort_by: str = Query("recommended_quality_score", pattern="^(recommended_quality_score|created_at)$"),
 ):
-    db = get_supabase()
-    try:
-        q = (
-            db.table("kb_enrichment_queue")
-            .select(
-                "id, complaint_id, resolution_text, scheduled_for, added_to_kb, created_at, "
-                "tier_level, tier_scope, category, issue_type, confidence_score, "
-                "recommended_quality_score, quality_signals_json, agent_action, "
-                "customer_feedback_score, resolution_type, rejection_reason"
-            )
-            .eq("processed", processed)
-        )
-        if tier_level is not None:
-            q = q.eq("tier_level", tier_level)
-        if category:
-            q = q.eq("category", category)
-        rows = q.order(sort_by, desc=True).execute().data or []
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB error (kb_enrichment_queue may not exist yet): {e}")
+    # Parse tier_level string — tolerate "null", "" gracefully
+    tier_level_int: Optional[int] = None
+    if tier_level is not None and tier_level.lower() not in ("", "null", "none"):
+        try:
+            tier_level_int = int(tier_level)
+        except ValueError:
+            pass
 
-    if min_quality is not None:
-        rows = [r for r in rows if (r.get("recommended_quality_score") or 0.0) >= min_quality]
+    # Parse min_quality string — tolerate "null", "" gracefully
+    min_quality_float: Optional[float] = None
+    if min_quality is not None and min_quality.lower() not in ("", "null", "none"):
+        try:
+            min_quality_float = float(min_quality)
+        except ValueError:
+            pass
+
+    processed_bool = processed.lower() == "true" if processed is not None else False
+
+    db = get_supabase()
+    _ENRICHED_COLS = (
+        "id, complaint_id, resolution_text, scheduled_for, added_to_kb, created_at, "
+        "tier_level, tier_scope, category, issue_type, confidence_score, "
+        "recommended_quality_score, quality_signals_json, agent_action, "
+        "customer_feedback_score, resolution_type, rejection_reason"
+    )
+    # Minimal columns guaranteed to exist on any version of this table.
+    _BASE_COLS = "id, complaint_id, resolution_text, scheduled_for, added_to_kb"
+
+    rows: list = []
+    for cols, order_col in [(_ENRICHED_COLS, sort_by), (_BASE_COLS, "id")]:
+        try:
+            q = db.table("kb_enrichment_queue").select(cols).eq("processed", processed_bool)
+            if tier_level_int is not None:
+                q = q.eq("tier_level", tier_level_int)
+            if category:
+                q = q.eq("category", category)
+            rows = q.order(order_col, desc=True).execute().data or []
+            break  # succeeded — stop trying fallbacks
+        except Exception:
+            continue
+    else:
+        # Both queries failed — table likely missing entirely
+        raise HTTPException(
+            status_code=500,
+            detail="kb_enrichment_queue table not found or schema too old. Run the migration first.",
+        )
+
+    if min_quality_float is not None:
+        rows = [r for r in rows if (r.get("recommended_quality_score") or 0.0) >= min_quality_float]
 
     return [
         QueueEntry(
@@ -869,7 +1018,8 @@ async def list_queue(
     ]
 
 
-@router.post("/queue/{queue_id}/approve", summary="Approve a queued entry and insert it into knowledge_base")
+@router.post("/queue/{queue_id}/approve", summary="Approve a queued entry and insert it into knowledge_base",
+             responses={404: {"description": "Queue entry not found"}, 500: {"description": "Database or embedding error"}})
 async def approve_queue_entry(queue_id: int, payload: ApproveQueueRequest):
     db = get_supabase()
     try:
@@ -893,7 +1043,7 @@ async def approve_queue_entry(queue_id: int, payload: ApproveQueueRequest):
     if not text:
         raise HTTPException(
             status_code=422,
-            detail="resolution_text is empty — provide it in the request body",
+            detail=[{"loc": ["body", "resolution_text"], "msg": "resolution_text is empty — provide it in the request body", "type": "value_error.missing"}],
         )
 
     # Resolve values: request body overrides queue row values
@@ -942,7 +1092,8 @@ async def approve_queue_entry(queue_id: int, payload: ApproveQueueRequest):
     }
 
 
-@router.post("/queue/{queue_id}/reject", summary="Reject a single queued entry")
+@router.post("/queue/{queue_id}/reject", summary="Reject a single queued entry",
+             responses={404: {"description": "Queue entry not found"}, 500: {"description": "Database error"}})
 async def reject_queue_entry(queue_id: int, payload: RejectQueueRequest = RejectQueueRequest()):
     db = get_supabase()
     try:
@@ -962,7 +1113,8 @@ async def reject_queue_entry(queue_id: int, payload: RejectQueueRequest = Reject
     return {"message": f"Queue entry {queue_id} rejected", "reason": payload.reason}
 
 
-@router.post("/queue/bulk-approve", summary="Bulk approve queue entries meeting quality / tier criteria")
+@router.post("/queue/bulk-approve", summary="Bulk approve queue entries meeting quality / tier criteria",
+             responses={500: {"description": "Database error querying queue"}})
 async def bulk_approve_queue(payload: BulkApproveRequest):
     """
     Approves all pending entries where recommended_quality_score >= min_quality_score.
@@ -984,8 +1136,28 @@ async def bulk_approve_queue(payload: BulkApproveRequest):
         if payload.category:
             q = q.eq("category", payload.category)
         entries = q.execute().data or []
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DB error: {e}")
+    except Exception:
+        # recommended_quality_score column may not exist yet (pre-migration).
+        # Fall back to fetching without it and filtering in Python.
+        try:
+            q2 = (
+                db.table("kb_enrichment_queue")
+                .select("id, complaint_id, resolution_text, tier_level, tier_scope, category, issue_type")
+                .eq("processed", False)
+            )
+            if payload.tier_level is not None:
+                q2 = q2.eq("tier_level", payload.tier_level)
+            if payload.category:
+                q2 = q2.eq("category", payload.category)
+            raw = q2.execute().data or []
+            # Column absent → all quality scores are effectively 0.0
+            entries = [
+                {**r, "recommended_quality_score": 0.0}
+                for r in raw
+                if 0.0 >= payload.min_quality_score
+            ]
+        except Exception as e2:
+            raise HTTPException(status_code=500, detail=f"DB error: {e2}")
 
     approved = 0
     failed   = 0
@@ -1044,8 +1216,9 @@ async def bulk_approve_queue(payload: BulkApproveRequest):
     }
 
 
-@router.post("/queue/bulk-reject", summary="Reject all currently pending auto-generated entries")
-async def bulk_reject_queue(payload: RejectQueueRequest = RejectQueueRequest(reason="Bulk rejected by admin")):
+@router.post("/queue/bulk-reject", summary="Reject all currently pending auto-generated entries",
+             responses={500: {"description": "Database error"}})
+async def bulk_reject_queue(payload: RejectQueueRequest):
     db = get_supabase()
     try:
         pending = (

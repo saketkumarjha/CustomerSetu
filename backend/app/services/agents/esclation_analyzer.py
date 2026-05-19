@@ -81,18 +81,50 @@ MAX_INTERNAL_TIER = 4   # Tier 5 is external (RBI), cannot be internally routed
 # Rule 1: Keywords in complaint text that signal a specific tier
 # Format: keyword → minimum tier required
 ESCALATION_KEYWORDS = {
-    # Tier 2 — Zonal keywords
-    "zonal":             2,
-    "zone office":       2,
-    "zonal manager":     2,
-    "cluster head":      2,
+    # Tier 1 — Branch-level explicit mentions
+    # (Useful when complaint starts below Tier 1 or pipeline needs to confirm minimum tier)
+    "branch manager":            1,
+    "branch head":               1,
+    "branch officer":            1,
+    "customer service officer":  1,
+    "relationship manager":      1,
+    "home branch":               1,
+    "base branch":               1,
+    "service branch":            1,
+    "account opening form":      1,
+    "counter staff":             1,
+    "teller":                    1,
 
-    # Tier 3 — Regional keywords
+    # Tier 2 — Zonal keywords
+    "zonal":                     2,
+    "zone office":               2,
+    "zonal manager":             2,
+    "cluster head":              2,
+    "zone head":                 2,
+    "zonal head":                2,
+    "zonal officer":             2,
+    "area manager":              2,
+    "area office":               2,
+    "circle office":             2,
+    "circle head":               2,
+    "controlling office":        2,
+    "lead bank":                 2,
+    "lead district manager":     2,
+    "field general manager":     2,
+    "fgm":                       2,
+    "divisional manager":        2,
+    "divisional office":         2,
+    "zonal grievance":           2,
+    "zone grievance":            2,
+    "cluster manager":           2,
+    "territory manager":         2,
+
+    # Tier 3 — Regional keywords  (DO NOT MODIFY)
     "regional":          3,
     "regional manager":  3,
     "regional office":   3,
 
-    # Tier 4 — HO / Nodal keywords
+    # Tier 4 — HO / Nodal keywords  (DO NOT MODIFY)
     "nodal officer":     4,
     "head office":       4,
     "grievance officer": 4,
@@ -110,23 +142,70 @@ ESCALATION_KEYWORDS = {
 # Rule 4: Category → minimum tier required
 # Categories that inherently need higher authority
 CATEGORY_MINIMUM_TIER = {
-    # Tier 1 (branch can handle) — default, not listed
+    # ── Tier 1 — Branch can handle ───────────────────────────────────────────
     "General Banking":              1,
     "KYC":                         1,
     "Debit Card":                  1,
+    # Digital payments — branch can initiate reversal / lodge claim
+    "ATM":                         1,
+    "Net Banking":                 1,
+    "Mobile Banking":              1,
+    "Internet Banking":            1,
+    "UPI":                         1,
+    "NEFT":                        1,
+    "RTGS":                        1,
+    "IMPS":                        1,
+    # Account & instrument level
+    "Cheque":                      1,
+    "Savings Account":             1,
+    "Current Account":             1,
+    "Account Statement":           1,
+    "Passbook":                    1,
+    "Fixed Deposit":               1,
+    "Recurring Deposit":           1,
+    "Locker":                      1,
+    "Nomination":                  1,
+    "Account Closure":             1,
+    "Account Opening":             1,
+    "Pension Account":             1,
+    "Senior Citizen Account":      1,
+    "Jan Dhan Account":            1,
+    # Card & OTP
+    "Credit Card Billing":         1,   # billing queries (disputes → Tier 2)
+    "OTP Issue":                   1,
+    "Card Delivery":               1,
 
-    # Tier 2 — Zonal minimum
+    # ── Tier 2 — Zonal minimum (loan grievances, complex products) ───────────
     "Home Loan":                   2,
     "Personal Loan":               2,
     "Business Loan":               2,
     "Insurance":                   2,
+    "Vehicle Loan":                2,
+    "Two Wheeler Loan":            2,
+    "Education Loan":              2,
+    "Agriculture Loan":            2,
+    "Crop Loan":                   2,
+    "Kisan Credit Card":           2,
+    "Loan Against Property":       2,
+    "Gold Loan":                   2,
+    "Microfinance":                2,
+    "Overdraft":                   2,
+    "Cash Credit":                 2,
+    "Term Loan":                   2,
+    "Credit Card":                 2,   # fraud / dispute level (not billing)
+    "NRI Account":                 2,
+    "Priority Banking":            2,
+    "Wealth Management":           2,
+    "Mutual Fund":                 2,
+    "Demat Account":               2,
+    "Trading Account":             2,
 
-    # Tier 3 — Regional minimum
+    # ── Tier 3 — Regional minimum  (DO NOT MODIFY) ───────────────────────────
     "CREDIT_BUREAU_MISREPORTING":  3,
     "MIS_SELLING_OF_PRODUCTS":     3,
     "UNSOLICITED_CARD_ISSUANCE":   3,
 
-    # Tier 4 — HO / Nodal mandatory
+    # ── Tier 4 — HO / Nodal mandatory  (DO NOT MODIFY) ──────────────────────
     "UNAUTHORIZED_TRANSACTION_FRAUD":  4,
     "RECOVERY_AGENT_HARASSMENT":       4,
     "DELAY_IN_PROPERTY_DOC_RELEASE":   4,

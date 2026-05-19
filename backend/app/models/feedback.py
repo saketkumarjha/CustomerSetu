@@ -1,13 +1,13 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 
 
 class AgentFeedbackInput(BaseModel):
-    complaint_id: str
+    complaint_id: str = Field(..., min_length=1)
     agent_id: str
-    action: str = Field(
+    action: Literal["accept", "edit", "reject", "escalate"] = Field(
         ...,
-        description="accept | edit | reject | escalate"
+        description="accept | edit | reject | escalate",
     )
     original_draft: str
     final_response: Optional[str] = Field(
@@ -21,7 +21,7 @@ class AgentFeedbackInput(BaseModel):
 
 
 class CustomerFeedbackInput(BaseModel):
-    complaint_id: str
+    complaint_id: str = Field(..., min_length=1)
     customer_id: str
     rating: int = Field(..., ge=1, le=5)
     issue_tags: Optional[list[str]] = Field(

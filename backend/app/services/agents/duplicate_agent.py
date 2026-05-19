@@ -31,7 +31,11 @@ def _get_client() -> OpenAI:
     global _openai_client
     if _openai_client is None:
         settings = get_settings()
-        _openai_client = OpenAI(api_key=settings.openai_api_key)
+        _openai_client = OpenAI(
+            api_key=settings.openai_api_key,
+            timeout=30.0,    # embedding calls are fast — 30s is generous
+            max_retries=1,
+        )
     return _openai_client
 
 

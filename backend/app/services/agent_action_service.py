@@ -59,6 +59,24 @@ def _simulate_send(customer_id: str, channel: str, response: str, complaint_id: 
                 print(f"[AGENT ACTION] WhatsApp send failed for {complaint_id} — logged")
         except Exception as exc:
             print(f"[AGENT ACTION] WhatsApp dispatch error: {exc}")
+
+    elif channel == "email":
+        try:
+            from app.services.email_service import send_email_reply
+            supabase = get_supabase()
+            row = supabase.table("complaints").select("original_text").eq("complaint_id", complaint_id).execute()
+            original_text = row.data[0].get("original_text", "") if row.data else ""
+            first_line = original_text.split("\n")[0] if original_text else ""
+            raw_subject = first_line.replace("Subject:", "").strip() if first_line.startswith("Subject:") else ""
+            reply_subject = (f"Re: {raw_subject}" if raw_subject else "Response from Union Bank of India")
+            sent = send_email_reply(customer_id, reply_subject, response)
+            if sent:
+                print(f"[AGENT ACTION] Email reply sent to {customer_id} for {complaint_id}")
+            else:
+                print(f"[AGENT ACTION] Email send failed for {complaint_id} — logged")
+        except Exception as exc:
+            print(f"[AGENT ACTION] Email dispatch error: {exc}")
+
     else:
         print(f"\n[AGENT ACTION] Sending to customer {customer_id} via {channel}")
         print(f"[AGENT ACTION] Complaint: {complaint_id}")
@@ -97,8 +115,9 @@ def handle_accept(complaint_id: str, agent_id: str, notes: str = "") -> dict:
 
     sent_at = _simulate_send(customer_id, channel, draft, complaint_id)
 
-    # Transition status first so update_status reads the correct current status
-    update_status(complaint_id, "auto_closed", changed_by=agent_id,
+    # "resolved" — human agent reviewed and approved; distinct from "auto_closed"
+    # which is reserved for complaints handled entirely by the AUTO pipeline route.
+    update_status(complaint_id, "resolved", changed_by=agent_id,
                   metadata={"action": "ACCEPT"})
 
     supabase.table("complaints").update({
@@ -136,7 +155,7 @@ def handle_accept(complaint_id: str, agent_id: str, notes: str = "") -> dict:
         "action": "ACCEPT",
         "response_sent": True,
         "sent_at": sent_at,
-        "status": "auto_closed",
+        "status": "resolved",
         "message": "AI draft accepted and sent to customer.",
     }
 
@@ -158,8 +177,7 @@ def handle_edit(
 
     sent_at = _simulate_send(customer_id, channel, edited_response, complaint_id)
 
-    # Transition status first so update_status reads the correct current status
-    update_status(complaint_id, "auto_closed", changed_by=agent_id,
+    update_status(complaint_id, "resolved", changed_by=agent_id,
                   metadata={"action": "EDIT"})
 
     supabase.table("complaints").update({
@@ -198,7 +216,7 @@ def handle_edit(
         "action": "EDIT",
         "response_sent": True,
         "sent_at": sent_at,
-        "status": "auto_closed",
+        "status": "resolved",
         "message": "Edited response sent to customer.",
     }
 

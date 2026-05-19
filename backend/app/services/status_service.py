@@ -14,12 +14,12 @@ from app.db.supabase_client import get_supabase
 
 ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "pending_review":          {"in_review", "overdue_review"},
-    "in_review":               {"auto_closed", "awaiting_agent_response", "escalating"},
-    "awaiting_agent_response": {"auto_closed", "escalating"},
-    "escalating":              {"pending_review", "auto_closed"},
+    "in_review":               {"auto_closed", "resolved", "awaiting_agent_response", "escalating"},
+    "awaiting_agent_response": {"auto_closed", "resolved", "escalating"},
+    "escalating":              {"pending_review", "auto_closed", "resolved"},
     "overdue_review":          {"in_review", "escalating"},
     # human_review is an alias used by the pipeline; treat same as in_review
-    "human_review":            {"in_review", "auto_closed", "awaiting_agent_response", "escalating"},
+    "human_review":            {"in_review", "auto_closed", "resolved", "awaiting_agent_response", "escalating"},
 }
 
 
@@ -62,7 +62,7 @@ def update_status(
 
     if new_status == "in_review":
         update_payload["review_started_at"] = now.isoformat()
-    elif new_status in {"auto_closed", "awaiting_agent_response"}:
+    elif new_status in {"auto_closed", "resolved", "awaiting_agent_response"}:
         update_payload["human_review_completed_at"] = now.isoformat()
 
     supabase.table("complaints").update(update_payload).eq(

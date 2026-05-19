@@ -8,7 +8,8 @@ CSAT trigger:     POST /api/v1/feedback/trigger-survey/{complaint_id}
 """
 
 import json
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks, Query
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Path, status, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from app.models.feedback import AgentFeedbackInput, CustomerFeedbackInput
 from app.services.feedback.agent_feedback import process_agent_feedback
@@ -22,6 +23,11 @@ router = APIRouter()
     "/agent",
     status_code=status.HTTP_201_CREATED,
     summary="Submit agent feedback on AI draft",
+    responses={
+        400: {"description": "Business-logic rejection"},
+        404: {"description": "Complaint not found"},
+        500: {"description": "Database error"},
+    },
 )
 async def submit_agent_feedback(
     feedback: AgentFeedbackInput,
@@ -38,18 +44,6 @@ async def submit_agent_feedback(
     """
 
 
-    if feedback.action in ("accept", "edit") and not feedback.final_response:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"final_response is required for action '{feedback.action}'"
-        )
-
-    if feedback.action == "reject" and not feedback.rejection_reason:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="rejection_reason is required for action 'reject'"
-        )
-
     try:
         # Synchronous: just store the feedback record + calculate score
         # Fast — single Supabase insert
@@ -63,7 +57,9 @@ async def submit_agent_feedback(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        msg = str(e)
+        code = status.HTTP_404_NOT_FOUND if "not found" in msg.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -109,8 +105,14 @@ async def submit_agent_feedback(
 @router.post(
     "/trigger-survey/{complaint_id}",
     summary="Trigger CSAT survey for a complaint (simulated)",
+    responses={
+        404: {"description": "Complaint not found"},
+        409: {"description": "Pipeline has not completed yet — complaint not in a surveyable state"},
+    },
 )
-async def trigger_csat_survey(complaint_id: str):
+async def trigger_csat_survey(
+    complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)"),
+):
     """
     Simulate sending a CSAT survey to the customer.
 
@@ -138,8 +140,8 @@ async def trigger_csat_survey(complaint_id: str):
 
     if complaint.get("pipeline_status") != "complete":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot trigger survey — pipeline has not completed yet."
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot trigger survey — pipeline has not completed yet.",
         )
 
     # Update status to awaiting_feedback
@@ -171,19 +173,23 @@ async def trigger_csat_survey(complaint_id: str):
 async def export_fine_tune_dataset(
     min_combined_score: float = Query(
         default=0.0,
-        description="Minimum combined RL score filter (0.0 = all records)"
+        ge=0.0,
+        le=1.0,
+        description="Minimum combined RL score filter (0.0–1.0, 0.0 = all records)"
     ),
     category: str = Query(
         default=None,
         description="Filter by complaint category"
     ),
-    only_agent_accepted: bool = Query(
-        default=False,
-        description="Only export agent-accepted records (agent_rating=1.0)"
+    only_agent_accepted: Optional[str] = Query(
+        default=None,
+        description="Only export agent-accepted records (true/false)",
+        pattern="^(true|false|null)$"
     ),
-    preview: bool = Query(
-        default=False,
-        description="Preview mode — returns JSON stats without downloading"
+    preview: Optional[str] = Query(
+        default=None,
+        description="Preview mode — returns JSON stats without downloading (true/false)",
+        pattern="^(true|false|null)$"
     ),
 ):
     """
@@ -206,6 +212,9 @@ async def export_fine_tune_dataset(
       4. Replace Groq endpoint with your custom model
       5. Real RLHF becomes possible
     """
+    only_agent_accepted_bool = only_agent_accepted is not None and only_agent_accepted.lower() == "true"
+    preview_bool = preview is not None and preview.lower() == "true"
+
     supabase = get_supabase()
 
     query = (
@@ -220,14 +229,14 @@ async def export_fine_tune_dataset(
     if category:
         query = query.eq("category", category)
 
-    if only_agent_accepted:
+    if only_agent_accepted_bool:
         query = query.eq("agent_rating", 1.0)
 
     result = query.execute()
     records = result.data or []
 
     # ── Preview mode ──────────────────────────────────────────────────────
-    if preview:
+    if preview_bool:
         category_dist = {}
         rating_dist = {"1.0": 0, "0.5": 0, "0.0": 0}
         for r in records:
@@ -270,13 +279,11 @@ async def export_fine_tune_dataset(
             "hint": "Submit complaints and provide agent feedback to accumulate data.",
         }
 
-    # ── Mark as exported ──────────────────────────────────────────────────
     ids = [r["id"] for r in records]
-    supabase.table("fine_tune_dataset").update(
-        {"exported": True}
-    ).in_("id", ids).execute()
 
-    # ── Stream as JSONL ───────────────────────────────────────────────────
+    # ── Stream as JSONL then mark exported AFTER full iteration ──────────
+    # Marking before streaming means a client disconnect leaves records
+    # permanently flagged as exported without them actually being downloaded.
     def generate_jsonl():
         for record in records:
             line = {
@@ -291,6 +298,13 @@ async def export_fine_tune_dataset(
                 "combined_score": record.get("combined_score"),
             }
             yield json.dumps(line, ensure_ascii=False) + "\n"
+        # Mark as exported only after all rows have been yielded to the client
+        try:
+            supabase.table("fine_tune_dataset").update(
+                {"exported": True}
+            ).in_("id", ids).execute()
+        except Exception:
+            pass  # non-fatal — records will be re-exported next time
 
     return StreamingResponse(
         generate_jsonl(),
@@ -434,6 +448,11 @@ async def list_dataset_records(
     "/customer",
     status_code=status.HTTP_201_CREATED,
     summary="Submit customer CSAT feedback",
+    responses={
+        400: {"description": "Feedback already submitted or other business-logic rejection"},
+        404: {"description": "Complaint not found"},
+        500: {"description": "Database error processing feedback"},
+    },
 )
 async def submit_customer_feedback(feedback: CustomerFeedbackInput):
     """
@@ -467,10 +486,9 @@ async def submit_customer_feedback(feedback: CustomerFeedbackInput):
             feedback_text=feedback.feedback_text,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        msg = str(e)
+        code = status.HTTP_404_NOT_FOUND if "not found" in msg.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=msg)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

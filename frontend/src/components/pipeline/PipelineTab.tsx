@@ -66,14 +66,31 @@ export function PipelineTab() {
   const detachSseRef = useRef<(() => void) | null>(null);
   const runningRef = useRef(false);
 
-  // Auto Resolution toggle — persisted in localStorage so SubmitTab can read it
+  // Auto Resolution toggle — synced with backend so all channels respect it.
+  // Initialise from localStorage for instant render; then fetch authoritative
+  // server state. On toggle, POST to the backend first, then update local state.
   const [autoMode, setAutoMode] = useState(
-    () => localStorage.getItem("auto_resolution_enabled") === "true",
+    () => localStorage.getItem("auto_resolution_enabled") !== "false",
   );
-  const toggleAutoMode = () => {
+
+  useEffect(() => {
+    api.settings.getAutoMode().then((data) => {
+      setAutoMode(data.enabled);
+      localStorage.setItem("auto_resolution_enabled", String(data.enabled));
+    }).catch(() => { /* keep current localStorage value on network error */ });
+  }, []);
+
+  const toggleAutoMode = async () => {
     const next = !autoMode;
-    setAutoMode(next);
-    localStorage.setItem("auto_resolution_enabled", String(next));
+    try {
+      const data = await api.settings.setAutoMode(next);
+      setAutoMode(data.enabled);
+      localStorage.setItem("auto_resolution_enabled", String(data.enabled));
+    } catch {
+      // Optimistic update if API is unreachable
+      setAutoMode(next);
+      localStorage.setItem("auto_resolution_enabled", String(next));
+    }
   };
 
   const { data: complaintsData, loading: listLoading } = useApiData(

@@ -19,8 +19,6 @@ import {
   Share2,
 } from "lucide-react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type ModalType =
   | "complaint"
   | "unauthorized"
@@ -30,7 +28,6 @@ type ModalType =
   | "connect"
   | null;
 
-// ─── Static data ──────────────────────────────────────────────────────────────
 
 const CARDS = [
   {
@@ -110,7 +107,13 @@ const CARDS = [
 const CALL_ITEMS = [
   {
     label: "All-India Toll Free",
-    numbers: ["1800-2333", "1800 208 2244", "1800 425 1515", "1800 425 3555", "1800 22 22 44"],
+    numbers: [
+      "1800-2333",
+      "1800 208 2244",
+      "1800 425 1515",
+      "1800 425 3555",
+      "1800 22 22 44",
+    ],
     type: "free" as const,
   },
   {
@@ -186,7 +189,6 @@ const SOCIALS = [
   { label: "YouTube", color: "bg-[#FF0000]" },
 ];
 
-// ─── Shared form primitives ───────────────────────────────────────────────────
 
 function FormField({
   label,
@@ -238,7 +240,6 @@ function SelectField({
   );
 }
 
-// ─── Modal shell ──────────────────────────────────────────────────────────────
 
 function ModalShell({
   title,
@@ -261,7 +262,9 @@ function ModalShell({
 
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className={`${headerColor} px-6 py-4 flex items-center justify-between flex-shrink-0`}>
+        <div
+          className={`${headerColor} px-6 py-4 flex items-center justify-between flex-shrink-0`}
+        >
           <div>
             <p className="text-white/60 text-[10px] font-semibold uppercase tracking-widest mb-0.5">
               Union Bank of India
@@ -281,7 +284,8 @@ function ModalShell({
         <div className="bg-ub-blue-light border-b border-ub-blue/10 px-6 py-2.5 flex items-center gap-2.5 flex-shrink-0">
           <Bot size={13} className="text-ub-blue flex-shrink-0" />
           <p className="text-xs text-ub-blue leading-relaxed">
-            Our AI agent will route your request and keep you updated via email or phone.
+            Our AI agent will route your request and keep you updated via email
+            or phone.
           </p>
         </div>
 
@@ -292,21 +296,51 @@ function ModalShell({
   );
 }
 
-// ─── Individual modals ────────────────────────────────────────────────────────
 
 function ComplaintModal({ onClose }: { onClose: () => void }) {
   return (
-    <ModalShell title="Submit Online Complaint / Query / Service Request" onClose={onClose}>
+    <ModalShell
+      title="Submit Online Complaint / Query / Service Request"
+      onClose={onClose}
+    >
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Full Name" type="text" placeholder="Enter your full name" required />
-          <FormField label="Account Number" type="text" placeholder="Enter account number" required />
-          <FormField label="Email Address" type="email" placeholder="you@example.com" required />
-          <FormField label="Phone Number" type="tel" placeholder="+91 XXXXX XXXXX" required />
+          <FormField
+            label="Full Name"
+            type="text"
+            placeholder="Enter your full name"
+            required
+          />
+          <FormField
+            label="Account Number"
+            type="text"
+            placeholder="Enter account number"
+            required
+          />
+          <FormField
+            label="Email Address"
+            type="email"
+            placeholder="you@example.com"
+            required
+          />
+          <FormField
+            label="Phone Number"
+            type="tel"
+            placeholder="+91 XXXXX XXXXX"
+            required
+          />
         </div>
         <SelectField
           label="Complaint Category"
-          options={["Account Issue", "Card Issue", "Loan Issue", "Digital Banking", "ATM / Cash Issue", "Service Request", "Other"]}
+          options={[
+            "Account Issue",
+            "Card Issue",
+            "Loan Issue",
+            "Digital Banking",
+            "ATM / Cash Issue",
+            "Service Request",
+            "Other",
+          ]}
           required
         />
         <div>
@@ -320,11 +354,18 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold text-gray-600 mb-2">Priority</label>
+          <label className="block text-xs font-semibold text-gray-600 mb-2">
+            Priority
+          </label>
           <div className="flex gap-4">
             {["General", "Urgent"].map((p) => (
               <label key={p} className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="priority" defaultChecked={p === "General"} className="accent-ub-blue" />
+                <input
+                  type="radio"
+                  name="priority"
+                  defaultChecked={p === "General"}
+                  className="accent-ub-blue"
+                />
                 <span className="text-sm text-gray-700 font-medium">{p}</span>
               </label>
             ))}
@@ -347,28 +388,76 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
 
 function UnauthorizedModal({ onClose }: { onClose: () => void }) {
   return (
-    <ModalShell title="Report Unauthorised Banking Transaction" onClose={onClose} headerColor="bg-ub-red">
+    <ModalShell
+      title="Report Unauthorised Banking Transaction"
+      onClose={onClose}
+      headerColor="bg-ub-red"
+    >
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <div className="bg-red-50 border border-ub-red/20 rounded-lg px-4 py-3 flex items-start gap-2.5">
-          <AlertTriangle size={14} className="text-ub-red mt-0.5 flex-shrink-0" />
+          <AlertTriangle
+            size={14}
+            className="text-ub-red mt-0.5 flex-shrink-0"
+          />
           <p className="text-xs text-ub-red font-medium leading-relaxed">
             Also call our dedicated fraud helpline immediately:{" "}
             <strong>1800 2222 43</strong>
           </p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Full Name" type="text" placeholder="Enter your full name" required />
-          <FormField label="Account Number" type="text" placeholder="Enter account number" required />
-          <FormField label="Transaction Date" type="date" placeholder="" required />
-          <FormField label="Transaction Amount (₹)" type="number" placeholder="e.g. 5000" required />
-          <FormField label="Transaction Reference / UTR ID" type="text" placeholder="Reference or UTR number" />
-          <SelectField
-            label="Transaction Type"
-            options={["ATM Withdrawal", "UPI Transfer", "Net Banking", "Debit / Credit Card", "NEFT / RTGS", "Other"]}
+          <FormField
+            label="Full Name"
+            type="text"
+            placeholder="Enter your full name"
             required
           />
-          <FormField label="Contact Email" type="email" placeholder="you@example.com" required />
-          <FormField label="Contact Phone" type="tel" placeholder="+91 XXXXX XXXXX" required />
+          <FormField
+            label="Account Number"
+            type="text"
+            placeholder="Enter account number"
+            required
+          />
+          <FormField
+            label="Transaction Date"
+            type="date"
+            placeholder=""
+            required
+          />
+          <FormField
+            label="Transaction Amount (₹)"
+            type="number"
+            placeholder="e.g. 5000"
+            required
+          />
+          <FormField
+            label="Transaction Reference / UTR ID"
+            type="text"
+            placeholder="Reference or UTR number"
+          />
+          <SelectField
+            label="Transaction Type"
+            options={[
+              "ATM Withdrawal",
+              "UPI Transfer",
+              "Net Banking",
+              "Debit / Credit Card",
+              "NEFT / RTGS",
+              "Other",
+            ]}
+            required
+          />
+          <FormField
+            label="Contact Email"
+            type="email"
+            placeholder="you@example.com"
+            required
+          />
+          <FormField
+            label="Contact Phone"
+            type="tel"
+            placeholder="+91 XXXXX XXXXX"
+            required
+          />
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1.5">
@@ -396,18 +485,66 @@ function BranchModal({ onClose }: { onClose: () => void }) {
     <ModalShell title="Branch Related Query" onClose={onClose}>
       <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField label="Full Name" type="text" placeholder="Enter your full name" required />
-          <FormField label="Account Number" type="text" placeholder="Enter account number" required />
-          <FormField label="Branch Name" type="text" placeholder="e.g. Nariman Point Branch" required />
-          <FormField label="Branch Code (optional)" type="text" placeholder="e.g. 001234" />
-          <FormField label="City" type="text" placeholder="e.g. Mumbai" required />
-          <FormField label="State" type="text" placeholder="e.g. Maharashtra" required />
-          <FormField label="Contact Phone" type="tel" placeholder="+91 XXXXX XXXXX" required />
-          <FormField label="Contact Email" type="email" placeholder="you@example.com" required />
+          <FormField
+            label="Full Name"
+            type="text"
+            placeholder="Enter your full name"
+            required
+          />
+          <FormField
+            label="Account Number"
+            type="text"
+            placeholder="Enter account number"
+            required
+          />
+          <FormField
+            label="Branch Name"
+            type="text"
+            placeholder="e.g. Nariman Point Branch"
+            required
+          />
+          <FormField
+            label="Branch Code (optional)"
+            type="text"
+            placeholder="e.g. 001234"
+          />
+          <FormField
+            label="City"
+            type="text"
+            placeholder="e.g. Mumbai"
+            required
+          />
+          <FormField
+            label="State"
+            type="text"
+            placeholder="e.g. Maharashtra"
+            required
+          />
+          <FormField
+            label="Contact Phone"
+            type="tel"
+            placeholder="+91 XXXXX XXXXX"
+            required
+          />
+          <FormField
+            label="Contact Email"
+            type="email"
+            placeholder="you@example.com"
+            required
+          />
         </div>
         <SelectField
           label="Query Type"
-          options={["Account Services", "Loan Services", "Staff Behaviour", "Branch Timings / Availability", "Document Submission", "Locker Services", "Zonal / Regional Escalation", "Other"]}
+          options={[
+            "Account Services",
+            "Loan Services",
+            "Staff Behaviour",
+            "Branch Timings / Availability",
+            "Document Submission",
+            "Locker Services",
+            "Zonal / Regional Escalation",
+            "Other",
+          ]}
           required
         />
         <div>
@@ -440,7 +577,8 @@ function CallUsModal({ onClose }: { onClose: () => void }) {
     <ModalShell title="Call Us" onClose={onClose}>
       <div className="space-y-5">
         <p className="text-sm text-gray-500 leading-relaxed">
-          Choose the helpline that matches your need. Tap any number to call directly from your device.
+          Choose the helpline that matches your need. Tap any number to call
+          directly from your device.
         </p>
         {CALL_ITEMS.map((item) => (
           <div key={item.label} className="flex items-start gap-3">
@@ -520,14 +658,19 @@ function WriteToUsModal({ onClose }: { onClose: () => void }) {
                 customercare@unionbankofindia.bank.in
               </div>
             </div>
-            <ExternalLink size={14} className="ml-auto text-ub-blue/40 group-hover:text-white/60 flex-shrink-0" />
+            <ExternalLink
+              size={14}
+              className="ml-auto text-ub-blue/40 group-hover:text-white/60 flex-shrink-0"
+            />
           </a>
         </div>
 
         {/* Divider */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400 font-medium">Banking Related Query</span>
+          <span className="text-xs text-gray-400 font-medium">
+            Banking Related Query
+          </span>
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
@@ -548,14 +691,23 @@ function WriteToUsModal({ onClose }: { onClose: () => void }) {
                     : "bg-white text-gray-700 hover:bg-gray-50"
                 }`}
               >
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${openOpt === opt.id ? "bg-ub-blue/10" : "bg-gray-100"}`}>
-                  <opt.icon size={14} className={openOpt === opt.id ? "text-ub-blue" : "text-gray-500"} />
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${openOpt === opt.id ? "bg-ub-blue/10" : "bg-gray-100"}`}
+                >
+                  <opt.icon
+                    size={14}
+                    className={
+                      openOpt === opt.id ? "text-ub-blue" : "text-gray-500"
+                    }
+                  />
                 </div>
                 <span className="font-semibold flex-1">{opt.label}</span>
                 <ChevronDown
                   size={14}
                   className={`flex-shrink-0 transition-transform duration-200 ${
-                    openOpt === opt.id ? "rotate-180 text-ub-blue" : "text-gray-400"
+                    openOpt === opt.id
+                      ? "rotate-180 text-ub-blue"
+                      : "text-gray-400"
                   }`}
                 />
               </button>
@@ -564,7 +716,10 @@ function WriteToUsModal({ onClose }: { onClose: () => void }) {
                 <div className="bg-gray-50 border-t border-gray-100 px-4 py-4">
                   <ol className="space-y-3">
                     {opt.steps.map((step, i) => (
-                      <li key={i} className="flex items-start gap-3 text-xs text-gray-600">
+                      <li
+                        key={i}
+                        className="flex items-start gap-3 text-xs text-gray-600"
+                      >
                         <span className="w-5 h-5 rounded-full bg-ub-blue text-white font-bold text-[10px] flex items-center justify-center flex-shrink-0 mt-0.5">
                           {i + 1}
                         </span>
@@ -598,7 +753,8 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
     <ModalShell title="Connect With Us" onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-gray-500 leading-relaxed">
-          Follow Union Bank of India on our official social media channels for updates, alerts, and support.
+          Follow Union Bank of India on our official social media channels for
+          updates, alerts, and support.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {SOCIALS.map((s) => (
@@ -623,7 +779,6 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Card ─────────────────────────────────────────────────────────────────────
 
 function SupportCard({
   card,
@@ -660,7 +815,10 @@ function SupportCard({
         {/* Icon badge bottom-left */}
         <div className="absolute bottom-3 left-3">
           <div className="w-9 h-9 rounded-xl bg-white shadow-lg flex items-center justify-center">
-            <Icon size={16} className={card.urgent ? "text-ub-red" : "text-ub-blue"} />
+            <Icon
+              size={16}
+              className={card.urgent ? "text-ub-red" : "text-ub-blue"}
+            />
           </div>
         </div>
       </div>
@@ -693,7 +851,6 @@ function SupportCard({
   );
 }
 
-// ─── Main section ─────────────────────────────────────────────────────────────
 
 export default function ComplaintReachSection() {
   const [modal, setModal] = useState<ModalType>(null);
@@ -701,7 +858,6 @@ export default function ComplaintReachSection() {
   return (
     <section id="pipeline" className="py-16 md:py-24 bg-gray-50">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
-
         {/* ── Header ── */}
         <div className="text-center mb-10">
           <div className="text-ub-red text-xs font-bold uppercase tracking-[0.15em] mb-3">
@@ -759,12 +915,18 @@ export default function ComplaintReachSection() {
       </div>
 
       {/* ── Modals ── */}
-      {modal === "complaint"   && <ComplaintModal   onClose={() => setModal(null)} />}
-      {modal === "unauthorized"&& <UnauthorizedModal onClose={() => setModal(null)} />}
-      {modal === "branch"      && <BranchModal       onClose={() => setModal(null)} />}
-      {modal === "callus"      && <CallUsModal        onClose={() => setModal(null)} />}
-      {modal === "writetous"   && <WriteToUsModal     onClose={() => setModal(null)} />}
-      {modal === "connect"     && <ConnectModal       onClose={() => setModal(null)} />}
+      {modal === "complaint" && (
+        <ComplaintModal onClose={() => setModal(null)} />
+      )}
+      {modal === "unauthorized" && (
+        <UnauthorizedModal onClose={() => setModal(null)} />
+      )}
+      {modal === "branch" && <BranchModal onClose={() => setModal(null)} />}
+      {modal === "callus" && <CallUsModal onClose={() => setModal(null)} />}
+      {modal === "writetous" && (
+        <WriteToUsModal onClose={() => setModal(null)} />
+      )}
+      {modal === "connect" && <ConnectModal onClose={() => setModal(null)} />}
     </section>
   );
 }
