@@ -1,6 +1,5 @@
 """
 Feedback Routes — Agent and Customer feedback endpoints
-
 Agent feedback:   POST /api/v1/feedback/agent
 Customer CSAT:    POST /api/v1/feedback/customer
 Dataset export:   GET  /api/v1/feedback/export-dataset
@@ -144,25 +143,46 @@ async def trigger_csat_survey(
             detail="Cannot trigger survey — pipeline has not completed yet.",
         )
 
+    # Fetch channel details needed to dispatch the survey
+    detail_result = (
+        supabase.table("complaints")
+        .select("channel, customer_id, original_text")
+        .eq("complaint_id", complaint_id)
+        .execute()
+    )
+    channel = ""
+    customer_id_val = ""
+    original_text = ""
+    if detail_result.data:
+        d = detail_result.data[0]
+        channel = d.get("channel", "")
+        customer_id_val = d.get("customer_id", "")
+        original_text = d.get("original_text", "")
+
     # Update status to awaiting_feedback
     supabase.table("complaints").update(
         {"status": "awaiting_feedback"}
     ).eq("complaint_id", complaint_id).execute()
 
+    # Send the actual survey via the complaint's channel
+    survey_sent = False
+    try:
+        from app.services.feedback_survey_service import send_feedback_survey
+        send_feedback_survey(complaint_id, channel, customer_id_val, original_text)
+        survey_sent = True
+    except Exception:
+        survey_sent = False
+
     return {
         "complaint_id": complaint_id,
         "survey_triggered": True,
+        "survey_sent": survey_sent,
+        "channel": channel,
         "status_updated_to": "awaiting_feedback",
         "message": (
-            "CSAT survey triggered. "
-            "In production, an email/SMS would be sent to the customer. "
-            "For demo: use POST /api/v1/feedback/customer to submit ratings."
+            f"CSAT survey triggered and dispatched via {channel or 'unknown channel'}. "
+            "Customer will receive a feedback link to rate their experience."
         ),
-        "survey_fields": {
-            "rating": "1-5 stars (required)",
-            "issue_tags": "too_slow | wrong_solution | rude | incomplete (optional)",
-            "feedback_text": "Free text (optional, Presidio will mask PII)",
-        },
     }
 
 

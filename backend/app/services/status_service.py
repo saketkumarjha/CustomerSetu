@@ -20,6 +20,8 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "overdue_review":          {"in_review", "escalating"},
     # human_review is an alias used by the pipeline; treat same as in_review
     "human_review":            {"in_review", "auto_closed", "resolved", "awaiting_agent_response", "escalating"},
+    # escalated — set by the orchestrator while partial pipeline runs at a higher tier
+    "escalated":               {"resolved", "auto_closed", "pending_review", "in_review"},
 }
 
 

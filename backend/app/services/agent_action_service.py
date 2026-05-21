@@ -40,11 +40,13 @@ def _log_feedback(
         pass  # non-critical audit log — do not block the action
 
 
-def _simulate_send(customer_id: str, channel: str, response: str, complaint_id: str) -> str:
+def _simulate_send(customer_id: str, channel: str, response: str, complaint_id: str, original_text: str = "") -> str:
     """
     Send response to customer.
-    - whatsapp channel → real Twilio dispatch
-    - all other channels → simulation (print to console)
+    - whatsapp → real Twilio dispatch
+    - email    → SMTP via email_service
+    - web      → parse customer email from original_text, send via SMTP
+    - other    → console log
     """
     now = datetime.now(timezone.utc).isoformat()
 
@@ -63,12 +65,9 @@ def _simulate_send(customer_id: str, channel: str, response: str, complaint_id: 
     elif channel == "email":
         try:
             from app.services.email_service import send_email_reply
-            supabase = get_supabase()
-            row = supabase.table("complaints").select("original_text").eq("complaint_id", complaint_id).execute()
-            original_text = row.data[0].get("original_text", "") if row.data else ""
             first_line = original_text.split("\n")[0] if original_text else ""
             raw_subject = first_line.replace("Subject:", "").strip() if first_line.startswith("Subject:") else ""
-            reply_subject = (f"Re: {raw_subject}" if raw_subject else "Response from Union Bank of India")
+            reply_subject = (f"Re: {raw_subject}" if raw_subject else f"Re: Your Complaint {complaint_id} — Union Bank of India")
             sent = send_email_reply(customer_id, reply_subject, response)
             if sent:
                 print(f"[AGENT ACTION] Email reply sent to {customer_id} for {complaint_id}")
@@ -76,6 +75,24 @@ def _simulate_send(customer_id: str, channel: str, response: str, complaint_id: 
                 print(f"[AGENT ACTION] Email send failed for {complaint_id} — logged")
         except Exception as exc:
             print(f"[AGENT ACTION] Email dispatch error: {exc}")
+
+    elif channel == "web":
+        # Web form submissions embed the customer's email in original_text.
+        # Parse it and send the reply via SMTP so the customer receives it.
+        try:
+            from app.services.email_service import extract_email_from_web_text, send_email_reply
+            customer_email = extract_email_from_web_text(original_text)
+            if customer_email:
+                subject = f"Re: Your Complaint {complaint_id} — Union Bank of India"
+                sent = send_email_reply(customer_email, subject, response)
+                if sent:
+                    print(f"[AGENT ACTION] Web→Email reply sent to {customer_email} for {complaint_id}")
+                else:
+                    print(f"[AGENT ACTION] Web→Email send failed for {complaint_id}")
+            else:
+                print(f"[AGENT ACTION] Web complaint {complaint_id}: no email found in text — reply not sent")
+        except Exception as exc:
+            print(f"[AGENT ACTION] Web email dispatch error: {exc}")
 
     else:
         print(f"\n[AGENT ACTION] Sending to customer {customer_id} via {channel}")
@@ -91,7 +108,7 @@ def _get_complaint(complaint_id: str) -> dict:
         supabase.table("complaints")
         .select(
             "complaint_id, customer_id, channel, draft_response, "
-            "confidence_score, current_tier, assigned_agent_id"
+            "confidence_score, current_tier, assigned_agent_id, original_text"
         )
         .eq("complaint_id", complaint_id)
         .execute()
@@ -112,8 +129,9 @@ def handle_accept(complaint_id: str, agent_id: str, notes: str = "") -> dict:
     confidence = c.get("confidence_score") or 0.0
     channel = c.get("channel", "web")
     customer_id = c.get("customer_id", "")
+    original_text = c.get("original_text", "")
 
-    sent_at = _simulate_send(customer_id, channel, draft, complaint_id)
+    sent_at = _simulate_send(customer_id, channel, draft, complaint_id, original_text)
 
     # "resolved" — human agent reviewed and approved; distinct from "auto_closed"
     # which is reserved for complaints handled entirely by the AUTO pipeline route.
@@ -150,6 +168,13 @@ def handle_accept(complaint_id: str, agent_id: str, notes: str = "") -> dict:
     except Exception:
         pass
 
+    # Send CSAT survey to customer via their channel
+    try:
+        from app.services.feedback_survey_service import send_feedback_survey
+        send_feedback_survey(complaint_id, channel, customer_id, original_text)
+    except Exception:
+        pass
+
     return {
         "complaint_id": complaint_id,
         "action": "ACCEPT",
@@ -174,8 +199,9 @@ def handle_edit(
     confidence = c.get("confidence_score") or 0.0
     channel = c.get("channel", "web")
     customer_id = c.get("customer_id", "")
+    original_text = c.get("original_text", "")
 
-    sent_at = _simulate_send(customer_id, channel, edited_response, complaint_id)
+    sent_at = _simulate_send(customer_id, channel, edited_response, complaint_id, original_text)
 
     update_status(complaint_id, "resolved", changed_by=agent_id,
                   metadata={"action": "EDIT"})
@@ -208,6 +234,13 @@ def handle_edit(
             action       = "EDIT",
             action_data  = {"edited_response": edited_response, "notes": notes},
         )
+    except Exception:
+        pass
+
+    # Send CSAT survey to customer via their channel
+    try:
+        from app.services.feedback_survey_service import send_feedback_survey
+        send_feedback_survey(complaint_id, channel, customer_id, original_text)
     except Exception:
         pass
 

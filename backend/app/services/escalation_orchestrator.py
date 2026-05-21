@@ -24,6 +24,7 @@ from app.services.escalation_logger import (
     log_escalation,
     mark_escalation_complete,
     mark_escalation_failed,
+    update_escalation_result,
 )
 from app.services.escalation_rollback import rollback_escalation
 from app.services.escalation_metrics import track_escalation_event
@@ -134,6 +135,7 @@ async def execute_escalation(
     )
     escalation_count = log_result.get("escalation_count", escalation_count + 1)
     escalation_path = log_result.get("escalation_path", projected_path)
+    history_id = log_result.get("history_id")
 
     # Mark complaint as actively escalating in DB so the frontend shows the
     # correct status while the partial pipeline runs at the new tier
@@ -176,11 +178,33 @@ async def execute_escalation(
             from_tier=from_tier,
         )
     except Exception as exc:
+        update_escalation_result(history_id, status="failed")
         rollback_escalation(complaint_id, from_tier, str(exc))
         track_escalation_event(complaint_id, "ESCALATION_FAILED", {"error": str(exc)})
         return _human_result(
             from_tier, original_state, "PIPELINE_FAILED", escalation_path=escalation_path
         )
+
+    # Write pipeline outputs back to the history row (phase-2 write)
+    update_escalation_result(
+        history_id=history_id,
+        tier_response_text=pipeline_result.get("draft_response"),
+        tier_knowledge_used=[
+            {"id": doc.get("id"), "category": doc.get("category"), "similarity": doc.get("similarity")}
+            for doc in pipeline_result.get("context_documents", [])
+            if doc.get("id")
+        ] or None,
+        agent_outputs_snapshot={
+            "route": pipeline_result.get("route"),
+            "confidence_score": pipeline_result.get("confidence_score"),
+            "grounding_score": pipeline_result.get("grounding_score"),
+            "rag_coverage": pipeline_result.get("rag_coverage"),
+            "escalation_decision": pipeline_result.get("escalation_decision"),
+            "next_target_tier": pipeline_result.get("next_target_tier"),
+            "errors": pipeline_result.get("errors", []),
+        },
+        status="completed",
+    )
 
     new_confidence = pipeline_result.get("confidence_score", 0.5)
     new_route = pipeline_result.get("route", "ESCALATE")

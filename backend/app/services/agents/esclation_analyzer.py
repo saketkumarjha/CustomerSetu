@@ -2,7 +2,7 @@
 Agent 10.5 — Escalation Decision Analyzer
 
 Triggered ONLY when Agent 10 (routing_agent) returns route == "ESCALATE"
-i.e., confidence_score < 0.95
+i.e., confidence_score < 0.75
 
 Responsibility:
   Analyze WHY confidence is low and decide:

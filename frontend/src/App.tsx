@@ -2,6 +2,7 @@ import { Component, type ReactNode } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LandingPage from "./components/home/LandingPage";
 import { MainApp } from "./components/home/MainApp";
+import FeedbackPage from "./components/feedback/FeedbackPage";
 
 interface EBState {
   error: Error | null;
@@ -50,6 +51,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/complaint" element={<MainApp />} />
+          <Route path="/feedback" element={<FeedbackPage />} />
         </Routes>
       </BrowserRouter>
     </ErrorBoundary>

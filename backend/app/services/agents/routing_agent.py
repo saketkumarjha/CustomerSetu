@@ -12,9 +12,9 @@ NEW Decision flow:
    - Severity 5           → route=HUMAN
    If any override fires  → return immediately, skip confidence check
 
-2. Confidence gate (single threshold: 0.95)
-   - confidence >= 0.95   → route=AUTO,    pipeline ends here
-   - confidence <  0.95   → route=ESCALATE, hand off to Agent 10.5
+2. Confidence gate (single threshold: 0.75)
+   - confidence >= 0.75   → route=AUTO,    pipeline ends here
+   - confidence <  0.75   → route=ESCALATE, hand off to Agent 10.5
 
 3. Risk score is ALWAYS calculated (for XAI audit + Agent 10.5 pass-through)
    but it does NOT affect routing in Agent 10.
@@ -44,7 +44,7 @@ from app.services.agents.resolution_agent import CATEGORY_CONFIDENCE_THRESHOLDS
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-AUTO_RESPOND_CONFIDENCE_GATE = 0.95  # Below this → Agent 10.5 decides tier
+AUTO_RESPOND_CONFIDENCE_GATE = 0.75  # Below this → Agent 10.5 decides tier
 
 # Override categories that imply minimum Tier 4 (Head Office / Nodal Officer)
 FRAUD_CATEGORIES = {

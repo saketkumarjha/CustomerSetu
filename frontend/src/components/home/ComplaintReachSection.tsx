@@ -17,7 +17,9 @@ import {
   ArrowRight,
   MessageCircle,
   Share2,
+  Loader2,
 } from "lucide-react";
+import { api } from "../../lib/api";
 
 type ModalType =
   | "complaint"
@@ -190,56 +192,6 @@ const SOCIALS = [
 ];
 
 
-function FormField({
-  label,
-  type,
-  placeholder,
-  required,
-}: {
-  label: string;
-  type: string;
-  placeholder: string;
-  required?: boolean;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-        {label}
-        {required && <span className="text-ub-red ml-0.5">*</span>}
-      </label>
-      <input
-        type={type}
-        placeholder={placeholder}
-        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
-      />
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  options,
-  required,
-}: {
-  label: string;
-  options: string[];
-  required?: boolean;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-        {label}
-        {required && <span className="text-ub-red ml-0.5">*</span>}
-      </label>
-      <select className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors bg-white">
-        {options.map((o) => (
-          <option key={o}>{o}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 
 function ModalShell({
   title,
@@ -298,51 +250,131 @@ function ModalShell({
 
 
 function ComplaintModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [email, setEmail] = useState("");
+  const [category, setCategory] = useState("Account Issue");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState<"General" | "Urgent">("General");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [complaintId, setComplaintId] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const complaintText = `[${priority.toUpperCase()}] Category: ${category}\nName: ${name}\nEmail: ${email}\n\n${description}`;
+
+    const formData = new FormData();
+    formData.append("complaint_text", complaintText);
+    formData.append("channel", "web");
+    formData.append("customer_id", accountNumber.trim() || email.trim());
+
+    const idempotencyKey = crypto.randomUUID();
+
+    try {
+      const res = await api.complaints.submit(formData, idempotencyKey);
+      await api.pipeline.run(res.complaint_id);
+      setComplaintId(res.complaint_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (complaintId) {
+    return (
+      <ModalShell title="Complaint Submitted" onClose={onClose}>
+        <div className="flex flex-col items-center py-8 gap-4 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+            <CheckCircle size={28} className="text-emerald-500" />
+          </div>
+          <div>
+            <p className="font-bold text-gray-900 text-base mb-1">Your complaint has been registered</p>
+            <p className="text-sm text-gray-500 mb-3">Our AI pipeline is processing your request now.</p>
+            <div className="inline-flex items-center gap-2 bg-ub-blue-light border border-ub-blue/20 rounded-lg px-4 py-2">
+              <span className="text-xs text-gray-500 font-medium">Complaint ID</span>
+              <span className="font-bold text-ub-blue text-sm tracking-wide">{complaintId}</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
+            You will receive updates via email. Save your complaint ID for future reference.
+          </p>
+          <button
+            onClick={onClose}
+            className="mt-2 px-6 py-2.5 rounded-lg bg-ub-blue text-white font-bold text-sm hover:bg-ub-blue-dark transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
+
   return (
     <ModalShell
       title="Submit Online Complaint / Query / Service Request"
       onClose={onClose}
     >
-      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField
-            label="Full Name"
-            type="text"
-            placeholder="Enter your full name"
-            required
-          />
-          <FormField
-            label="Account Number"
-            type="text"
-            placeholder="Enter account number"
-            required
-          />
-          <FormField
-            label="Email Address"
-            type="email"
-            placeholder="you@example.com"
-            required
-          />
-          <FormField
-            label="Phone Number"
-            type="tel"
-            placeholder="+91 XXXXX XXXXX"
-            required
-          />
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Full Name <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Enter your full name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Account Number <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Enter account number"
+              required
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Email Address <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
         </div>
-        <SelectField
-          label="Complaint Category"
-          options={[
-            "Account Issue",
-            "Card Issue",
-            "Loan Issue",
-            "Digital Banking",
-            "ATM / Cash Issue",
-            "Service Request",
-            "Other",
-          ]}
-          required
-        />
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+            Complaint Category <span className="text-ub-red">*</span>
+          </label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors bg-white"
+          >
+            {["Account Issue", "Card Issue", "Loan Issue", "Digital Banking", "ATM / Cash Issue", "Service Request", "Other"].map((o) => (
+              <option key={o}>{o}</option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1.5">
             Describe Your Complaint <span className="text-ub-red">*</span>
@@ -350,6 +382,9 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
           <textarea
             rows={4}
             placeholder="Provide as much detail as possible..."
+            required
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors resize-none"
           />
         </div>
@@ -358,12 +393,13 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
             Priority
           </label>
           <div className="flex gap-4">
-            {["General", "Urgent"].map((p) => (
+            {(["General", "Urgent"] as const).map((p) => (
               <label key={p} className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
                   name="priority"
-                  defaultChecked={p === "General"}
+                  checked={priority === p}
+                  onChange={() => setPriority(p)}
                   className="accent-ub-blue"
                 />
                 <span className="text-sm text-gray-700 font-medium">{p}</span>
@@ -371,15 +407,31 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         </div>
+        {error && (
+          <div className="flex items-center gap-2 bg-red-50 border border-ub-red/20 rounded-lg px-3 py-2.5">
+            <AlertTriangle size={13} className="text-ub-red flex-shrink-0" />
+            <p className="text-xs text-ub-red">{error}</p>
+          </div>
+        )}
         <div className="flex items-center gap-1.5 text-xs text-gray-400">
           <Clock size={11} className="text-amber-500" />
           General queries resolved in under 2 minutes
         </div>
         <button
           type="submit"
-          className="w-full py-3 rounded-lg bg-ub-blue text-white font-bold text-sm hover:bg-ub-blue-dark transition-colors shadow-lg shadow-ub-blue/20 flex items-center justify-center gap-2"
+          disabled={loading}
+          className="w-full py-3 rounded-lg bg-ub-blue text-white font-bold text-sm hover:bg-ub-blue-dark transition-colors shadow-lg shadow-ub-blue/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Submit Complaint <ArrowRight size={14} />
+          {loading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Submitting…
+            </>
+          ) : (
+            <>
+              Submit Complaint <ArrowRight size={14} />
+            </>
+          )}
         </button>
       </form>
     </ModalShell>
@@ -387,78 +439,200 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
 }
 
 function UnauthorizedModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [email, setEmail] = useState("");
+  const [transactionDate, setTransactionDate] = useState("");
+  const [transactionAmount, setTransactionAmount] = useState("");
+  const [transactionRef, setTransactionRef] = useState("");
+  const [transactionType, setTransactionType] = useState("ATM Withdrawal");
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [complaintId, setComplaintId] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const complaintText = [
+      `[URGENT] Category: Unauthorized Transaction`,
+      `Name: ${name}`,
+      `Email: ${email}`,
+      `Account Number: ${accountNumber}`,
+      `Transaction Date: ${transactionDate}`,
+      `Transaction Amount: ₹${transactionAmount}`,
+      transactionRef ? `Transaction Reference / UTR: ${transactionRef}` : null,
+      `Transaction Type: ${transactionType}`,
+      ``,
+      description,
+    ]
+      .filter((line) => line !== null)
+      .join("\n");
+
+    const formData = new FormData();
+    formData.append("complaint_text", complaintText);
+    formData.append("channel", "web");
+    formData.append("customer_id", accountNumber.trim() || email.trim());
+
+    const idempotencyKey = crypto.randomUUID();
+
+    try {
+      const res = await api.complaints.submit(formData, idempotencyKey);
+      await api.pipeline.run(res.complaint_id);
+      setComplaintId(res.complaint_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (complaintId) {
+    return (
+      <ModalShell
+        title="Fraud Report Submitted"
+        onClose={onClose}
+        headerColor="bg-ub-red"
+      >
+        <div className="flex flex-col items-center py-8 gap-4 text-center">
+          <div className="w-14 h-14 rounded-full bg-red-50 border border-ub-red/20 flex items-center justify-center">
+            <CheckCircle size={28} className="text-ub-red" />
+          </div>
+          <div>
+            <p className="font-bold text-gray-900 text-base mb-1">Fraud report registered</p>
+            <p className="text-sm text-gray-500 mb-3">Our fraud team has been alerted and will act within 24 hours.</p>
+            <div className="inline-flex items-center gap-2 bg-red-50 border border-ub-red/20 rounded-lg px-4 py-2">
+              <span className="text-xs text-gray-500 font-medium">Complaint ID</span>
+              <span className="font-bold text-ub-red text-sm tracking-wide">{complaintId}</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
+            Updates will be sent to your email. For immediate assistance call{" "}
+            <strong className="text-ub-red">1800 2222 43</strong>.
+          </p>
+          <button
+            onClick={onClose}
+            className="mt-2 px-6 py-2.5 rounded-lg bg-ub-red text-white font-bold text-sm hover:bg-red-700 transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
+
   return (
     <ModalShell
       title="Report Unauthorised Banking Transaction"
       onClose={onClose}
       headerColor="bg-ub-red"
     >
-      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="bg-red-50 border border-ub-red/20 rounded-lg px-4 py-3 flex items-start gap-2.5">
-          <AlertTriangle
-            size={14}
-            className="text-ub-red mt-0.5 flex-shrink-0"
-          />
+          <AlertTriangle size={14} className="text-ub-red mt-0.5 flex-shrink-0" />
           <p className="text-xs text-ub-red font-medium leading-relaxed">
             Also call our dedicated fraud helpline immediately:{" "}
             <strong>1800 2222 43</strong>
           </p>
         </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField
-            label="Full Name"
-            type="text"
-            placeholder="Enter your full name"
-            required
-          />
-          <FormField
-            label="Account Number"
-            type="text"
-            placeholder="Enter account number"
-            required
-          />
-          <FormField
-            label="Transaction Date"
-            type="date"
-            placeholder=""
-            required
-          />
-          <FormField
-            label="Transaction Amount (₹)"
-            type="number"
-            placeholder="e.g. 5000"
-            required
-          />
-          <FormField
-            label="Transaction Reference / UTR ID"
-            type="text"
-            placeholder="Reference or UTR number"
-          />
-          <SelectField
-            label="Transaction Type"
-            options={[
-              "ATM Withdrawal",
-              "UPI Transfer",
-              "Net Banking",
-              "Debit / Credit Card",
-              "NEFT / RTGS",
-              "Other",
-            ]}
-            required
-          />
-          <FormField
-            label="Contact Email"
-            type="email"
-            placeholder="you@example.com"
-            required
-          />
-          <FormField
-            label="Contact Phone"
-            type="tel"
-            placeholder="+91 XXXXX XXXXX"
-            required
-          />
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Full Name <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Enter your full name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Account Number <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Enter account number"
+              required
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Transaction Date <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="date"
+              required
+              value={transactionDate}
+              onChange={(e) => setTransactionDate(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Transaction Amount (₹) <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="number"
+              placeholder="e.g. 5000"
+              required
+              min="1"
+              value={transactionAmount}
+              onChange={(e) => setTransactionAmount(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Transaction Reference / UTR ID
+            </label>
+            <input
+              type="text"
+              placeholder="Reference or UTR number"
+              value={transactionRef}
+              onChange={(e) => setTransactionRef(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Transaction Type <span className="text-ub-red">*</span>
+            </label>
+            <select
+              required
+              value={transactionType}
+              onChange={(e) => setTransactionType(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors bg-white"
+            >
+              {["ATM Withdrawal", "UPI Transfer", "Net Banking", "Debit / Credit Card", "NEFT / RTGS", "Other"].map((o) => (
+                <option key={o}>{o}</option>
+              ))}
+            </select>
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Contact Email <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors"
+            />
+          </div>
         </div>
+
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1.5">
             Describe the Incident <span className="text-ub-red">*</span>
@@ -466,87 +640,261 @@ function UnauthorizedModal({ onClose }: { onClose: () => void }) {
           <textarea
             rows={3}
             placeholder="When, where, and what happened..."
+            required
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors resize-none"
           />
         </div>
+
+        {error && (
+          <div className="flex items-center gap-2 bg-red-50 border border-ub-red/20 rounded-lg px-3 py-2.5">
+            <AlertTriangle size={13} className="text-ub-red flex-shrink-0" />
+            <p className="text-xs text-ub-red">{error}</p>
+          </div>
+        )}
+
         <button
           type="submit"
-          className="w-full py-3 rounded-lg bg-ub-red text-white font-bold text-sm hover:bg-red-700 transition-colors shadow-lg shadow-red-200 flex items-center justify-center gap-2"
+          disabled={loading}
+          className="w-full py-3 rounded-lg bg-ub-red text-white font-bold text-sm hover:bg-red-700 transition-colors shadow-lg shadow-red-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Report Transaction <ArrowRight size={14} />
+          {loading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Submitting…
+            </>
+          ) : (
+            <>
+              Report Transaction <ArrowRight size={14} />
+            </>
+          )}
         </button>
       </form>
     </ModalShell>
   );
 }
 
+const BRANCH_QUERY_TYPES = [
+  "Account Services",
+  "Loan Services",
+  "Staff Behaviour",
+  "Branch Timings / Availability",
+  "Document Submission",
+  "Locker Services",
+  "Zonal / Regional Escalation",
+  "Other",
+];
+
 function BranchModal({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [branchName, setBranchName] = useState("");
+  const [branchCode, setBranchCode] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [queryType, setQueryType] = useState(BRANCH_QUERY_TYPES[0]);
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [complaintId, setComplaintId] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const complaintText = [
+      `Category: Branch Related Query`,
+      `Query Type: ${queryType}`,
+      `Name: ${name}`,
+      `Email: ${email}`,
+      `Phone: ${phone}`,
+      `Account Number: ${accountNumber}`,
+      `Branch Name: ${branchName}`,
+      branchCode ? `Branch Code: ${branchCode}` : null,
+      `City: ${city}`,
+      `State: ${state}`,
+      ``,
+      description,
+    ]
+      .filter((line) => line !== null)
+      .join("\n");
+
+    const formData = new FormData();
+    formData.append("complaint_text", complaintText);
+    formData.append("channel", "web");
+    formData.append("customer_id", accountNumber.trim() || email.trim());
+
+    const idempotencyKey = crypto.randomUUID();
+
+    try {
+      const res = await api.complaints.submit(formData, idempotencyKey);
+      await api.pipeline.run(res.complaint_id);
+      setComplaintId(res.complaint_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (complaintId) {
+    return (
+      <ModalShell title="Query Submitted" onClose={onClose}>
+        <div className="flex flex-col items-center py-8 gap-4 text-center">
+          <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+            <CheckCircle size={28} className="text-emerald-500" />
+          </div>
+          <div>
+            <p className="font-bold text-gray-900 text-base mb-1">Your branch query has been registered</p>
+            <p className="text-sm text-gray-500 mb-3">Our AI agent has routed it to the relevant branch/zonal team.</p>
+            <div className="inline-flex items-center gap-2 bg-ub-blue-light border border-ub-blue/20 rounded-lg px-4 py-2">
+              <span className="text-xs text-gray-500 font-medium">Complaint ID</span>
+              <span className="font-bold text-ub-blue text-sm tracking-wide">{complaintId}</span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
+            You will receive updates via email. Save your complaint ID for future reference.
+          </p>
+          <button
+            onClick={onClose}
+            className="mt-2 px-6 py-2.5 rounded-lg bg-ub-blue text-white font-bold text-sm hover:bg-ub-blue-dark transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </ModalShell>
+    );
+  }
+
   return (
     <ModalShell title="Branch Related Query" onClose={onClose}>
-      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField
-            label="Full Name"
-            type="text"
-            placeholder="Enter your full name"
-            required
-          />
-          <FormField
-            label="Account Number"
-            type="text"
-            placeholder="Enter account number"
-            required
-          />
-          <FormField
-            label="Branch Name"
-            type="text"
-            placeholder="e.g. Nariman Point Branch"
-            required
-          />
-          <FormField
-            label="Branch Code (optional)"
-            type="text"
-            placeholder="e.g. 001234"
-          />
-          <FormField
-            label="City"
-            type="text"
-            placeholder="e.g. Mumbai"
-            required
-          />
-          <FormField
-            label="State"
-            type="text"
-            placeholder="e.g. Maharashtra"
-            required
-          />
-          <FormField
-            label="Contact Phone"
-            type="tel"
-            placeholder="+91 XXXXX XXXXX"
-            required
-          />
-          <FormField
-            label="Contact Email"
-            type="email"
-            placeholder="you@example.com"
-            required
-          />
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Full Name <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Enter your full name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Account Number <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="Enter account number"
+              required
+              value={accountNumber}
+              onChange={(e) => setAccountNumber(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Branch Name <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Nariman Point Branch"
+              required
+              value={branchName}
+              onChange={(e) => setBranchName(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Branch Code <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. 001234"
+              value={branchCode}
+              onChange={(e) => setBranchCode(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              City <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Mumbai"
+              required
+              value={city}
+              onChange={(e) => setCity(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              State <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Maharashtra"
+              required
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Contact Phone <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="tel"
+              placeholder="+91 XXXXX XXXXX"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+              Contact Email <span className="text-ub-red">*</span>
+            </label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors"
+            />
+          </div>
         </div>
-        <SelectField
-          label="Query Type"
-          options={[
-            "Account Services",
-            "Loan Services",
-            "Staff Behaviour",
-            "Branch Timings / Availability",
-            "Document Submission",
-            "Locker Services",
-            "Zonal / Regional Escalation",
-            "Other",
-          ]}
-          required
-        />
+
+        <div>
+          <label className="block text-xs font-semibold text-gray-600 mb-1.5">
+            Query Type <span className="text-ub-red">*</span>
+          </label>
+          <select
+            required
+            value={queryType}
+            onChange={(e) => setQueryType(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors bg-white"
+          >
+            {BRANCH_QUERY_TYPES.map((o) => (
+              <option key={o}>{o}</option>
+            ))}
+          </select>
+        </div>
+
         <div>
           <label className="block text-xs font-semibold text-gray-600 mb-1.5">
             Describe Your Query <span className="text-ub-red">*</span>
@@ -554,18 +902,40 @@ function BranchModal({ onClose }: { onClose: () => void }) {
           <textarea
             rows={3}
             placeholder="Describe your branch-related query. Our AI agent retrieves branch-specific information to assist you..."
+            required
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors resize-none"
           />
         </div>
+
+        {error && (
+          <div className="flex items-center gap-2 bg-red-50 border border-ub-red/20 rounded-lg px-3 py-2.5">
+            <AlertTriangle size={13} className="text-ub-red flex-shrink-0" />
+            <p className="text-xs text-ub-red">{error}</p>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 text-xs text-gray-400">
           <CheckCircle size={11} className="text-emerald-500" />
           Branch & zonal queries resolved within 24 hours
         </div>
+
         <button
           type="submit"
-          className="w-full py-3 rounded-lg bg-ub-blue text-white font-bold text-sm hover:bg-ub-blue-dark transition-colors shadow-lg shadow-ub-blue/20 flex items-center justify-center gap-2"
+          disabled={loading}
+          className="w-full py-3 rounded-lg bg-ub-blue text-white font-bold text-sm hover:bg-ub-blue-dark transition-colors shadow-lg shadow-ub-blue/20 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Submit Query <ArrowRight size={14} />
+          {loading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Submitting…
+            </>
+          ) : (
+            <>
+              Submit Query <ArrowRight size={14} />
+            </>
+          )}
         </button>
       </form>
     </ModalShell>

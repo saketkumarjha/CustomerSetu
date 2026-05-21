@@ -55,6 +55,29 @@ def send_whatsapp_reply(to_number: str, message: str) -> bool:
         return False
 
 
+def send_feedback_survey_whatsapp(to_number: str, complaint_id: str, customer_id: str) -> bool:
+    """
+    Send a CSAT survey link to the customer via WhatsApp after complaint resolution.
+    Called by feedback_survey_service for whatsapp channel complaints.
+    """
+    from app.core.config import get_settings
+    import urllib.parse
+    s = get_settings()
+
+    encoded_cid = urllib.parse.quote(customer_id, safe="")
+    feedback_url = f"{s.frontend_base_url.rstrip('/')}/feedback?id={complaint_id}&cid={encoded_cid}"
+
+    message = (
+        f"Dear Customer,\n\n"
+        f"Your complaint *{complaint_id}* has been resolved by Union Bank of India.\n\n"
+        f"We'd love your feedback! Please rate your experience here:\n"
+        f"{feedback_url}\n\n"
+        f"For any further help, call 1800-22-2244 (Toll Free).\n"
+        f"Thank you for banking with us."
+    )
+    return send_whatsapp_reply(to_number, message)
+
+
 # ── Tier detection ────────────────────────────────────────────────────────────
 
 def detect_tier(text: str) -> int:

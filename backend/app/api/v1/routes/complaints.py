@@ -16,14 +16,14 @@ from fastapi import (
 )
 from typing import Literal, Optional, Annotated
 import re
-
+from functools import lru_cache
 from app.models.complaint import ComplaintSubmitResponse
 from app.services.image_handler import process_image_attachment
 from app.middleware.idempotency import check_idempotency, store_idempotency_key
 from app.middleware.rate_limiter import limiter
 from app.db.supabase_client import get_supabase
 from app.core.config import get_settings
-from app.services.agents.esclation_analyzer import execute_shadow_override
+# from app.services.agents.esclation_analyzer import execute_shadow_override
 
 router = APIRouter()
 
@@ -77,9 +77,6 @@ async def get_complaint(complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}
         )
 
     complaint = result.data[0]
-
-    # Remove encrypted original text from response
-    # It must never leave the backend unmasked
     complaint.pop("original_text", None)
 
     return complaint
@@ -95,7 +92,7 @@ async def list_complaints(
     category: str = Query(default=None, description="Filter by category"),
     severity: int = Query(default=None, ge=1, le=5, description="Filter by severity 1-5"),
     is_rbi_reportable: Optional[str] = Query(default=None, description="Filter RBI cases only (true/false)", pattern="^(true|false|null)$"),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=10, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ):
     """
@@ -141,50 +138,123 @@ async def list_complaints(
         "complaints": result.data or [],
     }
 
+
+# ── Patterns compiled once ────────────────────────────────────────────────────
+
+def _build_patterns() -> dict:
+    return {
+        "tier5": re.compile(
+            r"\b("
+            r"ombudsman|rbi\s+complaint|banking\s+ombudsman|"
+            r"rbi\s+grievance|cepd|grievance\s+redressal|"
+            r"consumer\s+forum|consumer\s+court|"
+            r"banking\s+ombudsman\s+\w+"          # e.g. "banking ombudsman mumbai"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "tier4": re.compile(
+            r"\b("
+            r"ceo|chairman|head\s+office|managing\s+director|"
+            r"general\s+manager|dgm|agm|"
+            r"corporate\s+office|national\s+head"
+            r")\b"
+            r"|\bmd\b",          # standalone MD kept separate to avoid "cmd", "remade" etc.
+            re.IGNORECASE,
+        ),
+        "tier3": re.compile(
+            r"\b("
+            r"regional\s+(manager|office|head)|"
+            r"ro_[a-z]{2,3}"                      # e.g. ro_mh, ro_del
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "tier2": re.compile(
+            r"\b("
+            r"zonal\s+(manager|office|head)|zone\s+manager|"
+            r"zo_[a-z]{2,4}|"                     # e.g. zo_north
+            r"br_[a-z]{2}_\d{3}"                  # branch code (moved here — zonal owns it)
+            r")\b",
+            re.IGNORECASE,
+        ),
+        # Tier 1 sub-signals
+        "branch_staff": re.compile(
+            r"\b(branch\s+(manager|staff|officer|head|employee))\b",
+            re.IGNORECASE,
+        ),
+        "negative": re.compile(
+            r"\b("
+            r"worst|bad|terrible|horrible|disgusting|"
+            r"frustrated|angry|furious|upset|helpless|"
+            r"pathetic|useless|incompetent|negligent|"
+            r"fraud|cheated?|scam|fake|"
+            r"unprofessional|rude|misbeh[ae]v(ed?|iour)|harass(ed|ment)|"
+            r"poor\s+service|no\s+response|ignored|misled"
+            r")\b",
+            re.IGNORECASE,
+        ),
+        "repeated_visits": re.compile(
+            r"("
+            r"visited?\s+\w+\s+\d+\s+times?|"
+            r"\d+\s+(times?|visits?)\s+to\s+(the\s+)?branch|"
+            r"(multiple|several|many|repeated)\s+(times?|visits?)"
+            r")",
+            re.IGNORECASE,
+        ),
+        "high_amount": re.compile(
+            r"[₹rs\.]+\s*\d{4,}",   # ₹1000 and above  (₹, Rs, Rs.)
+            re.IGNORECASE,
+        ),
+    }
+
+_PATTERNS = _build_patterns()
+
+# ── Tier labels ───────────────────────────────────────────────────────────────
+
+TIER_LABELS = {
+    0: "Standard Route",
+    1: "Branch Escalation",
+    2: "Zonal Escalation",
+    3: "Regional Escalation",
+    4: "Executive Escalation",
+    5: "RBI/Ombudsman Escalation",
+}
+
+# ── Main function ─────────────────────────────────────────────────────────────
+
 def detect_fast_track_tier(text: str) -> tuple[int, str]:
     """
-    Rule-Based Fast-Track Tier Detection (No ML)
+    Rule-based fast-track tier detection.
+
+    Returns (tier: int, label: str).
+    Higher tier = higher urgency. First match wins (tiers checked 5 → 0).
     """
-    if not text:
-        return 0, "Standard Route"
-        
-    text_lower = text.lower()
-    
-    # Tier 5
-    if any(kw in text_lower for kw in ["ombudsman", "rbi complaint", "banking ombudsman"]):
-        return 5, "RBI/Ombudsman Escalation"
-        
-    # Tier 4
-    if any(kw in text_lower for kw in ["ceo", "head office", "chairman"]) or re.search(r"\bmd\b", text_lower):
-        return 4, "Executive Escalation"
-        
-    # Tier 3
-    if any(kw in text_lower for kw in ["regional office", "regional manager"]):
-        return 3, "Regional Escalation"
-        
-    # Tier 2
-    if any(kw in text_lower for kw in ["zonal office", "zone manager"]):
-        return 2, "Zonal Escalation"
-        
-    # Tier 1
-    # 1. Branch code pattern (e.g., "BR_MH_001")
-    if re.search(r"br_[a-z]{2}_\d{3}", text_lower):
-        return 1, "Branch Code Detected"
-        
-    # 2. "branch manager", "branch staff" + negative sentiment
-    negative_words = [
-        "worst", "bad", "terrible", "frustrated", "angry", "pathetic", 
-        "useless", "fraud", "cheat", "scam", "unprofessional", "rude", "poor"
-    ]
-    has_branch_kw = any(kw in text_lower for kw in ["branch manager", "branch staff"])
-    has_negative = any(kw in text_lower for kw in negative_words)
-    
-    if has_branch_kw and has_negative:
-        return 1, "Branch Staff Negative Sentiment"
-        
-    return 0, "Standard Route"
+    if not text or not text.strip():
+        return 0, TIER_LABELS[0]
 
+    t = text.strip()
 
+    if _PATTERNS["tier5"].search(t):
+        return 5, TIER_LABELS[5]
+
+    if _PATTERNS["tier4"].search(t):
+        return 4, TIER_LABELS[4]
+
+    if _PATTERNS["tier3"].search(t):
+        return 3, TIER_LABELS[3]
+
+    if _PATTERNS["tier2"].search(t):
+        return 2, TIER_LABELS[2]
+
+    # Tier 1: any ONE of the three signals is enough
+    has_branch   = bool(_PATTERNS["branch_staff"].search(t))
+    has_negative = bool(_PATTERNS["negative"].search(t))
+    has_repeated = bool(_PATTERNS["repeated_visits"].search(t))
+    has_amount   = bool(_PATTERNS["high_amount"].search(t))
+
+    if (has_branch and has_negative) or has_repeated or has_amount:
+        return 1, TIER_LABELS[1]
+
+    return 0, TIER_LABELS[0]
 def _rate_limit_string() -> str:
     from app.core.config import get_settings as _gs
     return f"{_gs().rate_limit_per_minute}/minute"
@@ -238,8 +308,6 @@ async def submit_complaint(
     """
     settings = get_settings()
 
-    # ── Input validation ──────────────────────────────────────────────────
-    # Strip null bytes — Postgres TEXT columns reject \x00 with a 500 error.
     complaint_text = complaint_text.strip().replace('\x00', '')
     if len(complaint_text) < MIN_COMPLAINT_TEXT_CHARS:
         raise HTTPException(
@@ -271,22 +339,19 @@ async def submit_complaint(
             detail=f"customer_id too long (maximum {MAX_CUSTOMER_ID_CHARS} characters)."
         )
 
-    # ── Idempotency check ─────────────────────────────────────────────────
     idempotency_key = x_idempotency_key
 
     # Returns:
     #   None        → new key, proceed normally
     #   dict        → cached pipeline result, return immediately as 201
     #   JSONResponse→ 202 still-processing (pass through directly)
-    from fastapi.responses import JSONResponse as _JSONResponse
+    # from fastapi.responses import JSONResponse as _JSONResponse
     idempotency_result = await check_idempotency(idempotency_key)
     if idempotency_result is not None:
         return idempotency_result
 
-    # ── Generate complaint ID ─────────────────────────────────────────────
     complaint_id = f"CMP-{uuid.uuid4().hex[:8].upper()}"
 
-    # ── Image processing ──────────────────────────────────────────────────
     image_url = None
     extraction_method = None
     extracted_image_text = None
@@ -334,23 +399,18 @@ async def submit_complaint(
                 detail=f"Image processing failed: {str(e)}"
             )
 
-    # ── Fast-Track Tier Detection (Rule-Based) ────────────────────────────
     initial_tier, fast_track_reason = detect_fast_track_tier(merged_text)
 
-    # ── Create complaint record in Supabase ───────────────────────────────
     supabase = get_supabase()
 
     complaint_record = {
-        # ── Identity ──────────────────────────────────────────────────────
         "complaint_id":             complaint_id,
         "customer_id":              customer_id,
         "channel":                  channel,
-        # ── Text ──────────────────────────────────────────────────────────
         "original_text":            complaint_text,
         "merged_text":              merged_text,
         "image_url":                image_url,
         "extraction_method":        extraction_method,
-        # ── Pipeline state ────────────────────────────────────────────────
         "pipeline_status":          "pending",
         "status":                   "pending",
         # ── Tier routing (pre-pipeline defaults) ──────────────────────────
@@ -370,7 +430,6 @@ async def submit_complaint(
         "is_duplicate":             False,
         "is_rbi_reportable":        False,
         "rbi_reportable":           False,
-        # ── NOT NULL jsonb columns (must be present or Supabase rejects) ──
         "action_steps":             [],
         "grounding_warnings":       [],
         "missing_info_indicators":  [],
@@ -389,6 +448,22 @@ async def submit_complaint(
 
     # ── Store idempotency key ─────────────────────────────────────────────
     await store_idempotency_key(idempotency_key, complaint_id)
+
+    # ── ACK email for web-channel submissions ─────────────────────────────
+    # Parse the customer's email from the complaint text (frontend writes
+    # "Email: user@example.com" as a header line) and send an acknowledgement.
+    # This is purely informational — does NOT change status.
+    if channel == "web":
+        try:
+            from app.services.email_service import extract_email_from_web_text, send_ack_email
+            customer_email = extract_email_from_web_text(complaint_text)
+            if customer_email:
+                await asyncio.to_thread(send_ack_email, customer_email, complaint_id)
+        except Exception as _ack_err:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "[ACK] Failed for %s: %s", complaint_id, _ack_err
+            )
 
     # ── Build response ────────────────────────────────────────────────────
     return ComplaintSubmitResponse(
@@ -449,7 +524,6 @@ async def shadow_override(
         raise HTTPException(status_code=409, detail=msg)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get(
     "/{complaint_id}/escalation-status",

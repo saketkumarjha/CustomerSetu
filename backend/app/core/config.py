@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     twilio_whatsapp_number: str = "whatsapp:+14155238886"
     webhook_base_url: str = ""
 
+    # Frontend base URL — used to construct feedback survey links sent to customers
+    frontend_base_url: str = "http://localhost:5173"
+
     # Email SMTP (outbound customer reply emails)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

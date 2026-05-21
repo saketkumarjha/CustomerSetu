@@ -138,7 +138,7 @@ def execute_auto_response(
 
     # ── 3. DB update — complaint record ──────────────────────────────────────
     db_payload = {
-        "status":               "auto_closed",
+        "status":               "resolved",
         "pipeline_status":      "complete",
         "response_tier":        "full_auto",
         "auto_sent_at":         now.isoformat(),
@@ -171,6 +171,19 @@ def execute_auto_response(
         agent_score    = 1.0,
     )
 
+    # ── 6. Send CSAT feedback survey to customer ──────────────────────────────
+    try:
+        original_text = ""
+        if channel == "web":
+            row = supabase.table("complaints").select("original_text").eq(
+                "complaint_id", complaint_id
+            ).execute()
+            original_text = (row.data[0].get("original_text") or "") if row.data else ""
+        from app.services.feedback_survey_service import send_feedback_survey
+        send_feedback_survey(complaint_id, channel, customer_id, original_text)
+    except Exception as exc:
+        logger.warning("[AUTO] Feedback survey failed for %s: %s", complaint_id, exc)
+
     return {
         "action_taken":         "full_auto_sent",
         "sent_to_customer":     True,
@@ -195,10 +208,9 @@ def _simulate_send_to_customer(
 ) -> None:
     """
     Dispatch response to customer.
-      email     → Gmail SMTP (real send)
-      whatsapp  → Twilio (not yet wired — console log)
-      sms       → Twilio (not yet wired — console log)
-      web       → console log
+      email   → Gmail SMTP via customer_id (which IS the email for email channel)
+      web     → parse customer email from original_text, send via SMTP
+      whatsapp/sms → Twilio (not yet wired — console log)
     """
     if channel == "email":
         _send_email_reply(
@@ -208,6 +220,27 @@ def _simulate_send_to_customer(
             send_type=send_type,
         )
         return
+
+    if channel == "web":
+        # Web form embeds the customer email in original_text. Look it up and send.
+        try:
+            from app.services.email_service import extract_email_from_web_text
+            supabase = get_supabase()
+            row = supabase.table("complaints").select("original_text").eq("complaint_id", complaint_id).execute()
+            original_text = row.data[0].get("original_text", "") if row.data else ""
+            customer_email = extract_email_from_web_text(original_text)
+            if customer_email:
+                _send_email_reply(
+                    to_email=customer_email,
+                    complaint_id=complaint_id,
+                    response_text=draft_response,
+                    send_type=send_type,
+                )
+                return
+        except Exception as exc:
+            logger.warning("[AUTO] Web email lookup failed for %s: %s", complaint_id, exc)
+        # Fall through to console log if email not found
+        logger.warning("[AUTO] Web complaint %s: no customer email found — reply not sent", complaint_id)
 
     gateway = {"whatsapp": "Twilio WhatsApp", "sms": "Twilio SMS"}.get(
         channel, "Web Notification"
@@ -310,18 +343,23 @@ def _save_auto_response_to_dataset(
     try:
         complaint = (
             supabase.table("complaints")
-            .select("masked_text, category")
+            .select("masked_text, original_text, category")
             .eq("complaint_id", complaint_id)
             .execute()
         )
         if complaint.data:
+            row = complaint.data[0]
+            complaint_text = row.get("masked_text") or row.get("original_text") or ""
+            if not complaint_text:
+                logger.warning("[DATASET] Skipping fine_tune insert for %s — no complaint text", complaint_id)
+                return
             supabase.table("fine_tune_dataset").insert({
                 "complaint_id":             complaint_id,
-                "complaint_text":           complaint.data[0].get("masked_text", ""),
+                "complaint_text":           complaint_text,
                 "ai_draft":                 draft_response,
                 "agent_corrected_response": draft_response,
                 "agent_rating":             agent_score,
-                "category":                 complaint.data[0].get("category", "General Banking"),
+                "category":                 row.get("category") or "General Banking",
                 "exported":                 False,
             }).execute()
     except Exception as exc:

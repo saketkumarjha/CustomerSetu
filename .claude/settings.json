@@ -24,7 +24,8 @@
       "PowerShell(Stop-Process -Id 23464 -Force -ErrorAction SilentlyContinue)",
       "PowerShell(netstat -ano)",
       "Bash(venv\\\\Scripts\\\\python.exe -c \"from app.api.v1.routes.settings import is_auto_pipeline_enabled; print\\('OK'\\)\")",
-      "Read(//c/Users/jhasa/.claude/projects/c--Users-jhasa-OneDrive-Desktop-complaint-dashboard-Anijeet/**)"
+      "Read(//c/Users/jhasa/.claude/projects/c--Users-jhasa-OneDrive-Desktop-complaint-dashboard-Anijeet/**)",
+      "Bash(python -m app.scripts.seed_knowledge_base)"
     ]
   }
 }

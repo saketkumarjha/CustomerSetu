@@ -683,6 +683,15 @@ async def routing_node(state: PipelineState) -> dict:
         reasoning = result["reasoning"]
         override_triggered = result["override_triggered"]
 
+        # Formal Tier-1+ complaints were explicitly registered and ACK'd with a
+        # promise of human review.  The routing agent is unaware of tier — it can
+        # return AUTO solely on confidence score.  Override that here: send to
+        # Agent 10.5 (ESCALATE path) so a human always reviews the outcome.
+        _complaint_tier = state.get("tier_level") or state.get("current_tier") or 0
+        if route == "AUTO" and _complaint_tier >= 1:
+            route = "ESCALATE"
+            result["route"] = "ESCALATE"
+
         evidence = []
         if override_triggered:
             evidence = [f"OVERRIDE: {r[:80]}" for r in result["override_rules"][:3]]

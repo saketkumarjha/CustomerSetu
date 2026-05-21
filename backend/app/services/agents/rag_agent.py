@@ -258,22 +258,32 @@ def retrieve_context(
     ]
 
     if documents:
-        avg_sim = sum(d["similarity"] for d in documents) / len(documents)
+        avg_sim     = sum(d["similarity"] for d in documents) / len(documents)
+        avg_quality = sum(d.get("quality_score", 0.5) for d in documents) / len(documents)
+        tier_kb_coverage_score = (
+            avg_sim * 0.6
+            + (len(documents) / n) * 0.3
+            + avg_quality * 0.1
+        )
         reasoning = (
             f"Retrieved {len(documents)} document(s) from {total_in_kb} verified KB entries. "
             f"Category filter: '{category}'. "
             f"Average similarity: {avg_sim:.1%}. "
-            f"Top match similarity: {documents[0]['similarity']:.1%}."
+            f"Top match similarity: {documents[0]['similarity']:.1%}. "
+            f"KB coverage score: {tier_kb_coverage_score:.2f}."
         )
     else:
+        tier_kb_coverage_score = 0.0
         reasoning = (
             f"No matching documents found in knowledge base "
-            f"({total_in_kb} verified entries searched, category='{category}')."
+            f"({total_in_kb} verified entries searched, category='{category}'). "
+            f"Resolution Agent will rely on LLM general knowledge only."
         )
 
     return {
-        "documents":        documents,
-        "reasoning":        reasoning,
-        "total_in_kb":      total_in_kb,
-        "retrieval_method": "vector_search",
+        "documents":             documents,
+        "reasoning":             reasoning,
+        "total_in_kb":           total_in_kb,
+        "retrieval_method":      "vector_search",
+        "tier_kb_coverage_score": round(tier_kb_coverage_score, 4),
     }

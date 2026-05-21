@@ -33,7 +33,7 @@ def log_escalation(
         "escalated_by": "SYSTEM",
         "escalation_reason": escalation_reason,
         "escalated_at": now.isoformat(),
-        "status": "completed",
+        "status": "in_progress",
     }
 
     if confidence_before is not None:
@@ -51,7 +51,8 @@ def log_escalation(
     if agent_outputs_snapshot:
         history_row["agent_outputs_snapshot"] = agent_outputs_snapshot
 
-    supabase.table("complaint_escalation_history").insert(history_row).execute()
+    insert_result = supabase.table("complaint_escalation_history").insert(history_row).execute()
+    history_id = insert_result.data[0]["id"] if insert_result.data else None
 
     # Read current escalation state
     row_result = (
@@ -87,7 +88,32 @@ def log_escalation(
         "escalation_count": escalation_count,
         "escalation_path": escalation_path,
         "logged_at": now.isoformat(),
+        "history_id": history_id,
     }
+
+
+def update_escalation_result(
+    history_id: str,
+    tier_response_text: str = None,
+    tier_knowledge_used: list = None,
+    agent_outputs_snapshot: dict = None,
+    status: str = "completed",
+) -> None:
+    """
+    Phase-2 write — called after run_tier_transition_pipeline completes.
+    Updates the in_progress row with actual pipeline outputs.
+    """
+    if not history_id:
+        return
+    supabase = get_supabase()
+    payload: dict = {"status": status}
+    if tier_response_text:
+        payload["tier_response_text"] = tier_response_text
+    if tier_knowledge_used is not None:
+        payload["tier_knowledge_used"] = tier_knowledge_used
+    if agent_outputs_snapshot is not None:
+        payload["agent_outputs_snapshot"] = agent_outputs_snapshot
+    supabase.table("complaint_escalation_history").update(payload).eq("id", history_id).execute()
 
 
 def mark_escalation_complete(

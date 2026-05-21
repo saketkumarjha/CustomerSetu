@@ -1,10 +1,8 @@
 """
 Channel Demo Routes — Hackathon prototype endpoints for Twitter and IVR channels.
-
 In production these channels use real external services (Twitter Streaming API,
 Exotel/Twilio IVR). For the prototype demo these endpoints simulate the exact
 same intake pipeline so judges can trigger complaints from the UI.
-
 Routes:
   POST /api/v1/channels/twitter/demo        — Submit a sample tweet as complaint
   POST /api/v1/channels/ivr/demo            — Submit a sample IVR call as complaint

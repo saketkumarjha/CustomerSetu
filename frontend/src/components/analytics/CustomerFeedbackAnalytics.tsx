@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import {
   AreaChart,
   Area,
@@ -13,7 +14,6 @@ import { Star, TrendingUp, Users, MessageSquare } from "lucide-react";
 import { api } from "../../lib/api";
 import { useApiData } from "../../hooks/useApiData";
 
-// Dummy data for demonstration
 const DUMMY_WEEKLY_TREND = [
   { week: "Week 1", avg_csat: 4.2, response_count: 12 },
   { week: "Week 2", avg_csat: 4.5, response_count: 18 },
@@ -34,6 +34,12 @@ const DUMMY_BY_CHANNEL = [
   { channel: "Web Form", avg_csat: 4.5, response_count: 20 },
 ];
 
+// Static distribution — avoids Math.random() re-randomizing on every render
+const DUMMY_DISTRIBUTION: Record<number, number> = { 5: 28, 4: 19, 3: 12, 2: 5, 1: 3 };
+
+
+// ── Main export ───────────────────────────────────────────────────────────────
+
 export function CustomerFeedbackAnalytics() {
   const { data: csat } = useApiData(() => api.dashboard.csatTrends(30), []);
 
@@ -46,6 +52,13 @@ export function CustomerFeedbackAnalytics() {
     hasData && csat.by_category ? csat.by_category : DUMMY_BY_CATEGORY;
   const byChannel =
     hasData && csat.by_channel ? csat.by_channel : DUMMY_BY_CHANNEL;
+
+  // Build stable distribution from real data or static dummy — no Math.random()
+  const distribution: Record<number, number> = useMemo(() => {
+    if (!hasData) return DUMMY_DISTRIBUTION;
+    // If backend adds per-rating breakdown later, replace here.
+    return DUMMY_DISTRIBUTION;
+  }, [hasData]);
 
   return (
     <div className="space-y-6">
@@ -143,11 +156,7 @@ export function CustomerFeedbackAnalytics() {
                 <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="#f1f5f9"
-              vertical={false}
-            />
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
             <XAxis
               dataKey="week"
               tick={{ fontSize: 11, fill: "#94a3b8" }}
@@ -182,7 +191,6 @@ export function CustomerFeedbackAnalytics() {
 
       {/* Category and Channel Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* By Category */}
         <div className="bg-white rounded-xl border border-gray-100 p-6">
           <h3 className="font-semibold text-gray-900 mb-5">CSAT by Category</h3>
           <ResponsiveContainer width="100%" height={280}>
@@ -190,11 +198,7 @@ export function CustomerFeedbackAnalytics() {
               data={byCategory}
               margin={{ top: 10, right: 10, left: -10, bottom: 60 }}
             >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#f1f5f9"
-                vertical={false}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis
                 dataKey="category"
                 tick={{ fontSize: 10, fill: "#64748b" }}
@@ -218,17 +222,11 @@ export function CustomerFeedbackAnalytics() {
                   boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                 }}
               />
-              <Bar
-                dataKey="avg_csat"
-                fill="#8b5cf6"
-                radius={[8, 8, 0, 0]}
-                name="Avg CSAT"
-              />
+              <Bar dataKey="avg_csat" fill="#8b5cf6" radius={[8, 8, 0, 0]} name="Avg CSAT" />
             </BarChart>
           </ResponsiveContainer>
         </div>
 
-        {/* By Channel */}
         <div className="bg-white rounded-xl border border-gray-100 p-6">
           <h3 className="font-semibold text-gray-900 mb-5">CSAT by Channel</h3>
           <ResponsiveContainer width="100%" height={280}>
@@ -236,11 +234,7 @@ export function CustomerFeedbackAnalytics() {
               data={byChannel}
               margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
             >
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#f1f5f9"
-                vertical={false}
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
               <XAxis
                 dataKey="channel"
                 tick={{ fontSize: 11, fill: "#64748b" }}
@@ -261,39 +255,28 @@ export function CustomerFeedbackAnalytics() {
                   boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                 }}
               />
-              <Bar
-                dataKey="avg_csat"
-                fill="#6366f1"
-                radius={[8, 8, 0, 0]}
-                name="Avg CSAT"
-              />
+              <Bar dataKey="avg_csat" fill="#6366f1" radius={[8, 8, 0, 0]} name="Avg CSAT" />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Response Distribution */}
+      {/* Response Distribution — stable, no Math.random() */}
       <div className="bg-white rounded-xl border border-gray-100 p-6">
-        <h3 className="font-semibold text-gray-900 mb-5">
-          Response Distribution
-        </h3>
+        <h3 className="font-semibold text-gray-900 mb-5">Response Distribution</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[5, 4, 3, 2, 1].map((rating) => (
             <div
               key={rating}
               className="text-center p-4 bg-gray-50 rounded-lg border border-gray-100"
             >
-              <div className="flex items-center justify-center gap-1 mb-2">
+              <div className="flex items-center justify-center gap-0.5 mb-2">
                 {Array.from({ length: rating }).map((_, i) => (
-                  <Star
-                    key={i}
-                    size={14}
-                    className="fill-amber-400 text-amber-400"
-                  />
+                  <Star key={i} size={13} className="fill-amber-400 text-amber-400" />
                 ))}
               </div>
               <div className="text-2xl font-bold text-gray-900">
-                {Math.floor(Math.random() * 20) + 5}
+                {distribution[rating] ?? 0}
               </div>
               <div className="text-xs text-gray-500 mt-1">responses</div>
             </div>

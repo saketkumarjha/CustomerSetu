@@ -22,6 +22,127 @@ _VALID_EMAIL_RE = re.compile(
     r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9.\-]{2,}$'
 )
 
+# Matches "Email: user@example.com" lines written by the web form frontend.
+_WEB_EMAIL_LINE_RE = re.compile(
+    r'(?:^|\n)Email:\s*([a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z0-9.\-]{2,})',
+    re.IGNORECASE,
+)
+
+
+def extract_email_from_web_text(text: str) -> str | None:
+    """
+    Parse the customer's email address embedded by the web form in original_text.
+
+    The frontend writes: "Email: user@example.com" as one of the header lines.
+    Returns the address or None if not found / invalid.
+    """
+    if not text:
+        return None
+    m = _WEB_EMAIL_LINE_RE.search(text)
+    if not m:
+        return None
+    addr = m.group(1).strip()
+    return addr if _VALID_EMAIL_RE.match(addr) else None
+
+
+def send_ack_email(to_address: str, complaint_id: str) -> bool:
+    """
+    Send an acknowledgement email for web-channel complaints.
+
+    Does NOT change complaint status — purely informational.
+    """
+    from app.core.config import get_settings
+    s = get_settings()
+
+    if not _VALID_EMAIL_RE.match(to_address):
+        logger.warning("[ACK] Invalid recipient address: %r — skipping ACK", to_address)
+        return False
+    if not s.smtp_user or not s.smtp_password:
+        logger.warning("[ACK] SMTP not configured — cannot send ACK to %s", to_address)
+        return False
+
+    subject = f"Complaint Registered: {complaint_id} — Union Bank of India"
+    body = (
+        f"Dear Customer,\n\n"
+        f"Thank you for contacting Union Bank of India.\n\n"
+        f"Your complaint has been successfully registered with reference number "
+        f"**{complaint_id}**. Our team is reviewing your request and will respond "
+        f"within 24–48 hours.\n\n"
+        f"For urgent matters, please call: 1800-22-2244 (Toll Free)\n\n"
+        f"Regards,\n"
+        f"Union Bank of India — Customer Care"
+    )
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["From"] = s.email_from_address or s.smtp_user
+        msg["To"]   = to_address
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(s.smtp_host, s.smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(s.smtp_user, s.smtp_password)
+            server.sendmail(msg["From"], to_address, msg.as_string())
+
+        logger.info("[ACK] Sent to %s for complaint %s", to_address, complaint_id)
+        return True
+    except Exception as exc:
+        logger.error("[ACK] Failed to send to %s: %s", to_address, exc)
+        return False
+
+
+def send_feedback_survey_email(to_address: str, complaint_id: str, customer_id: str) -> bool:
+    """
+    Send a CSAT survey link to the customer after their complaint is resolved.
+    Called by feedback_survey_service for web and email channel complaints.
+    """
+    from app.core.config import get_settings
+    import urllib.parse
+    s = get_settings()
+
+    if not _VALID_EMAIL_RE.match(to_address):
+        logger.warning("[SURVEY] Invalid recipient address: %r — skipping", to_address)
+        return False
+    if not s.smtp_user or not s.smtp_password:
+        logger.warning("[SURVEY] SMTP not configured — cannot send survey to %s", to_address)
+        return False
+
+    encoded_cid = urllib.parse.quote(customer_id, safe="")
+    feedback_url = f"{s.frontend_base_url.rstrip('/')}/feedback?id={complaint_id}&cid={encoded_cid}"
+
+    subject = f"Share Your Feedback — Complaint {complaint_id} | Union Bank of India"
+    body = (
+        f"Dear Customer,\n\n"
+        f"Your complaint ({complaint_id}) has been resolved by our team.\n\n"
+        f"We'd love to hear about your experience. Please take a moment to rate our service:\n\n"
+        f"    {feedback_url}\n\n"
+        f"Your feedback helps us serve you better.\n\n"
+        f"Regards,\n"
+        f"Union Bank of India — Customer Care\n"
+        f"Toll Free: 1800-22-2244"
+    )
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["From"] = s.email_from_address or s.smtp_user
+        msg["To"] = to_address
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(s.smtp_host, s.smtp_port) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(s.smtp_user, s.smtp_password)
+            server.sendmail(msg["From"], to_address, msg.as_string())
+
+        logger.info("[SURVEY] Email sent to %s for complaint %s", to_address, complaint_id)
+        return True
+    except Exception as exc:
+        logger.error("[SURVEY] Failed to send to %s: %s", to_address, exc)
+        return False
+
 
 def send_email_reply(to_address: str, subject: str, body: str) -> bool:
     """

@@ -55,10 +55,7 @@ async def run_tier_transition_pipeline(
             retrieve_context,
             original_state.get("masked_text", ""),
             original_state.get("category", "General Banking"),
-            new_tier_level,
-            None,            # tier_scope
             3,               # n
-            excluded_kb_ids or [],
         )
         context_documents = rag_result.get("documents", [])
         rag_coverage = rag_result.get("tier_kb_coverage_score", 0.0)

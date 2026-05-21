@@ -87,21 +87,25 @@ def get_queue(
         )
         rows = queue_result.data or []
     except Exception as exc:
-        if not is_missing_relation_error(exc):
-            raise
+        # Swallow transient socket errors and schema-cache misses — return empty queue
+        # rather than crashing the agent desk with a 500.
+        logger.warning("get_queue: transient error for tier %d: %s", tier_level, exc)
         rows = []
 
     complaint_ids = [r["complaint_id"] for r in rows]
     complaints_meta: dict = {}
     if complaint_ids:
-        c_result = (
-            supabase.table("complaints")
-            .select("complaint_id, category, severity, urgency_score, rbi_tat_deadline, status")
-            .in_("complaint_id", complaint_ids)
-            .execute()
-        )
-        for c in c_result.data or []:
-            complaints_meta[c["complaint_id"]] = c
+        try:
+            c_result = (
+                supabase.table("complaints")
+                .select("complaint_id, category, severity, urgency_score, rbi_tat_deadline, status")
+                .in_("complaint_id", complaint_ids)
+                .execute()
+            )
+            for c in c_result.data or []:
+                complaints_meta[c["complaint_id"]] = c
+        except Exception as exc:
+            logger.warning("get_queue: complaints meta fetch failed: %s", exc)
 
     my_assigned = 0
     my_in_review = 0
@@ -378,7 +382,8 @@ def recover_stuck_complaints(
     except Exception as exc:
         if is_missing_relation_error(exc):
             return {"recovered": 0, "message": "agent_queue table not found"}
-        raise
+        logger.warning("recover_stuck: DB error fetching stuck complaints: %s", exc)
+        return {"recovered": 0, "message": f"Temporary DB error — try again shortly: {exc}"}
 
     if not stuck:
         return {"recovered": 0, "message": "No stuck complaints found"}
