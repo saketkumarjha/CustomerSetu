@@ -1121,11 +1121,92 @@ function WriteToUsModal({ onClose }: { onClose: () => void }) {
 function ConnectModal({ onClose }: { onClose: () => void }) {
   return (
     <ModalShell title="Connect With Us" onClose={onClose}>
-      <div className="space-y-4">
-        <p className="text-sm text-gray-500 leading-relaxed">
-          Follow Union Bank of India on our official social media channels for
-          updates, alerts, and support.
-        </p>
+      <div className="space-y-6">
+
+        {/* ── WhatsApp Sandbox ── */}
+        <div className="rounded-2xl border border-[#25D366]/30 bg-[#f0fdf4] overflow-hidden">
+          {/* Header */}
+          <div className="bg-[#25D366] px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageCircle size={16} className="text-white" />
+              <span className="font-bold text-white text-sm">WhatsApp — Lodge Complaint Instantly</span>
+            </div>
+            <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">
+              LIVE SANDBOX
+            </span>
+          </div>
+
+          <div className="p-4 flex flex-col sm:flex-row gap-4 items-center">
+            {/* Left: instructions */}
+            <div className="flex-1 space-y-3">
+              <p className="text-xs text-gray-600 leading-relaxed">
+                Scan the QR code or send a WhatsApp message to join our AI complaint assistant.
+              </p>
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <Phone size={13} className="text-[#25D366] flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-gray-400 font-medium">Step 1 — Send to</p>
+                    <p className="text-sm font-bold text-gray-900">+1 415 523 8886</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <MessageCircle size={13} className="text-[#25D366] flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-gray-400 font-medium">Step 2 — Message</p>
+                    <p className="text-sm font-bold text-gray-900 font-mono">join sand-hospital</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <CheckCircle size={13} className="text-[#25D366] flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] text-gray-400 font-medium">Step 3</p>
+                    <p className="text-xs text-gray-700">Type your complaint — AI handles the rest</p>
+                  </div>
+                </div>
+              </div>
+
+              <a
+                href="https://wa.me/14155238886?text=join%20sand-hospital"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#1ebe57] text-white text-xs font-bold px-4 py-2.5 rounded-lg transition-colors w-full justify-center"
+              >
+                <MessageCircle size={13} />
+                Open WhatsApp
+                <ExternalLink size={11} />
+              </a>
+
+              {/* Evaluator note */}
+              <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <AlertTriangle size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-[10px] text-amber-700 leading-relaxed">
+                  <strong>Note for evaluators:</strong> This is a Twilio WhatsApp Sandbox. The sandbox join code (<span className="font-mono">join sand-hospital</span>) is valid for approximately <strong>1 month</strong> from deployment. After expiry, a new sandbox session must be initiated from the Twilio console.
+                </p>
+              </div>
+            </div>
+
+            {/* Right: QR code */}
+            <div className="flex-shrink-0 flex flex-col items-center gap-2">
+              <img
+                src="/whatsapp-sandbox-qr.png"
+                alt="WhatsApp Sandbox QR Code"
+                className="w-36 h-36 rounded-xl border border-gray-200 shadow-sm object-contain bg-white p-1"
+              />
+              <p className="text-[10px] text-gray-400 font-medium text-center">Scan on mobile</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Divider ── */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400 font-medium">Social Media</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
+
+        {/* ── Social links ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {SOCIALS.map((s) => (
             <a
@@ -1144,6 +1225,7 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
             </a>
           ))}
         </div>
+
       </div>
     </ModalShell>
   );

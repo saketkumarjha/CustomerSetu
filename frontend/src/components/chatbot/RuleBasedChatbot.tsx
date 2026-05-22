@@ -41,8 +41,8 @@ const RuleBasedChatbot: React.FC<RuleBasedChatbotProps> = ({ language }) => {
 
   const handleSend = () => {
     if (!input.trim()) return;
-    const userMsg = { sender: "user", text: input };
-    const botMsg = { sender: "bot", text: getBotResponse(input) };
+    const userMsg = { sender: "user" as const, text: input };
+    const botMsg = { sender: "bot" as const, text: getBotResponse(input) };
     setMessages([...messages, userMsg, botMsg]);
     setInput("");
   };
