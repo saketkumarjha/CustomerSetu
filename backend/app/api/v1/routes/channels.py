@@ -490,7 +490,14 @@ async def whatsapp_webhook(
             from twilio.request_validator import RequestValidator as _TwilioValidator
             _validator = _TwilioValidator(_settings.twilio_auth_token)
             _sig = request.headers.get("X-Twilio-Signature", "")
-            _url = str(request.url)
+            # Azure App Service terminates TLS and forwards requests over HTTP internally.
+            # request.url reflects the internal http:// URL, but Twilio signed against
+            # the public https:// URL. Reconstruct using forwarded headers.
+            _proto = request.headers.get("X-Forwarded-Proto", "https")
+            _host = request.headers.get("X-Forwarded-Host") or request.headers.get("Host", "")
+            _url = f"{_proto}://{_host}{request.url.path}"
+            if request.url.query:
+                _url += f"?{request.url.query}"
             _params = dict(await request.form())
             if not _validator.validate(_url, _params, _sig):
                 _wa_logger.warning("[WHATSAPP] Rejected request with invalid Twilio signature from %s", request.client)

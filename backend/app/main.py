@@ -88,8 +88,12 @@ class _AllowHeaderMiddleware:
 app.add_middleware(
     CORSMiddleware,
     # allow_origins=["*"] is incompatible with allow_credentials=True (CORS spec + Starlette 0.20+).
-    # Use explicit origins in production. For local dev the wildcard pattern below works.
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app",
+    # Explicit origins cover the deployed Static Web App; regex covers localhost dev and
+    # any future *.azurestaticapps.net or *.vercel.app preview URLs.
+    allow_origins=[
+        "https://proud-plant-0e6ce2600.7.azurestaticapps.net",  # production Static Web App
+    ],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://.*\.azurestaticapps\.net",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

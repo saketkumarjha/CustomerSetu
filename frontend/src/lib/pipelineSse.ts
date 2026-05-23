@@ -89,6 +89,12 @@ export function dispatchPipelineSseData(
     return
   }
 
+  // Known informational events — log them but no UI action needed.
+  if (evt === 'escalation_triggered' || evt === 'assigned_to_agent' || evt === 'response_sent') {
+    sseLog(onLog, `event: ${evt}`, raw)
+    return
+  }
+
   sseLog(onLog, 'unhandled SSE payload', raw)
 }
 

@@ -7,11 +7,14 @@ Agent Action Service — Handle the 4 human-agent review actions.
   MANUAL_ESCALATE → override Agent 10.5, re-run pipeline at higher tier
 """
 
+import logging
 from datetime import datetime, timezone
 from app.db.supabase_client import get_supabase
 from app.services.queue_service import complete_queue_entry
 from app.services.status_service import update_status
 from app.services.metrics_service import track_review_completed
+
+logger = logging.getLogger(__name__)
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -165,8 +168,8 @@ def handle_accept(complaint_id: str, agent_id: str, notes: str = "") -> dict:
             agent_id     = agent_id,
             action       = "ACCEPT",
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("[AgentAction] KB enrichment enqueue failed for %s (ACCEPT): %s", complaint_id, exc)
 
     # Send CSAT survey to customer via their channel
     try:
@@ -234,8 +237,8 @@ def handle_edit(
             action       = "EDIT",
             action_data  = {"edited_response": edited_response, "notes": notes},
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("[AgentAction] KB enrichment enqueue failed for %s (EDIT): %s", complaint_id, exc)
 
     # Send CSAT survey to customer via their channel
     try:

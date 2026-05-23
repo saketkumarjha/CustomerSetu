@@ -166,6 +166,13 @@ class KBEnrichmentManager:
 
         # ── Quality check ─────────────────────────────────────────────────────
         quality = self.calculate_quality_signals(complaint, resolution_event)
+
+        # Human-reviewed resolutions are always worth queuing for admin inspection
+        # regardless of the computed score — the agent's edit IS the quality signal.
+        event_type = resolution_event.get("type", TYPE_AUTO_RESPONSE)
+        if event_type in (TYPE_AGENT_ACCEPTED, TYPE_AGENT_EDITED):
+            return True, quality
+
         if quality["score"] >= self.REVIEW_THRESHOLD:
             return True, quality
         return False, f"Quality score too low: {quality['score']:.2f}"
@@ -178,41 +185,45 @@ class KBEnrichmentManager:
         """
         Computes a weighted quality score from multiple signals.
 
-        Weights:
-          AI confidence          0.30 (auto) / blended (human)
-          Agent validation       0.20 (for human-reviewed routes)
+        Base weights (normalized when a signal is absent):
+          AI confidence          0.30 (auto) / 0.15 (agent-edited, human text dominates)
+          Agent validation       0.20 (accepted) / 0.40 (edited — human wrote the response)
           Customer satisfaction  0.25
           Tier generalisability  0.15
           First-time resolution  0.10
+
+        Combined = sum(signal_value * weight) / sum(applicable_weights)
+        This normalizes correctly when optional signals (CSAT) are absent.
         """
         signals: dict = {}
-        scores:  list = []
+        # contributions[key] = (value, weight)
+        contributions: dict = {}
         event_type = resolution_event.get("type", TYPE_AUTO_RESPONSE)
         conf = float(resolution_event.get("confidence_score") or 0.5)
 
         if event_type == TYPE_AUTO_RESPONSE:
             signals["ai_confidence"] = conf
-            scores.append(conf * 0.60)
+            contributions["ai_confidence"] = (conf, 0.30)
 
         elif event_type == TYPE_AGENT_ACCEPTED:
             signals["ai_confidence"]    = conf
             signals["agent_validation"] = 1.0
-            scores.append(conf  * 0.60)
-            scores.append(1.0   * 0.40)
+            contributions["ai_confidence"]    = (conf, 0.30)
+            contributions["agent_validation"] = (1.0,  0.20)
 
         elif event_type == TYPE_AGENT_EDITED:
+            # Agent wrote a better response — human text is the dominant quality signal.
             signals["ai_confidence"]    = conf
-            signals["agent_validation"] = 0.7
-            scores.append(conf * 0.40)
-            scores.append(0.7  * 0.30)
-            # edit_similarity omitted — would require storing original draft
+            signals["agent_validation"] = 1.0
+            contributions["ai_confidence"]    = (conf, 0.15)
+            contributions["agent_validation"] = (1.0,  0.40)
 
         # Customer satisfaction (CSAT 1–5)
         csat = complaint.get("customer_feedback_score")
         if csat is not None:
             csat_norm = float(csat) / 5.0
             signals["customer_satisfaction"] = csat_norm
-            scores.append(csat_norm * 0.25)
+            contributions["customer_satisfaction"] = (csat_norm, 0.25)
 
         # Tier generalisability: lower tier = more broadly applicable
         tier_resolved = int(
@@ -220,15 +231,20 @@ class KBEnrichmentManager:
         )
         tier_score = max(0.0, (6 - tier_resolved) / 6.0)
         signals["tier_generalizability"] = tier_score
-        scores.append(tier_score * 0.50)
+        contributions["tier_generalizability"] = (tier_score, 0.15)
 
         # First-time resolution bonus
         escalation_count = int(complaint.get("escalation_count") or 0)
         ftr_score = 1.0 if escalation_count == 0 else 0.5
         signals["first_time_resolution"] = ftr_score
-        scores.append(ftr_score * 0.30)
+        contributions["first_time_resolution"] = (ftr_score, 0.10)
 
-        combined = sum(scores) / max(len(scores), 1)
+        # Normalized weighted average — dividing by sum of applicable weights, NOT len(scores)
+        total_weight = sum(w for _, w in contributions.values())
+        combined = (
+            sum(v * w for v, w in contributions.values()) / total_weight
+            if total_weight > 0 else 0.0
+        )
 
         recommendation = (
             "approve" if combined >= 0.85

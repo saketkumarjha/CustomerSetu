@@ -64,10 +64,8 @@ from app.services.rbi.tat_rules import calculate_tat_deadline
 
 SHADOW_OVERRIDE_WINDOW_HOURS = 1
 
-# Confidence below this → escalate to tier+1 even with no other signals
 CONFIDENCE_ESCALATION_THRESHOLD = 0.80
 
-# Tier metadata
 TIER_META = {
     1: {"label": "Branch Level",           "sla_hours": 24,  "shadow_eligible": True},
     2: {"label": "Zonal Office",           "sla_hours": 48,  "shadow_eligible": True},
