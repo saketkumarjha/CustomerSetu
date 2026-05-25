@@ -58,12 +58,19 @@ def generate_embedding(text: str) -> list[float]:
     settings = get_settings()
     client = _get_client()
 
-    response = client.embeddings.create(
-        model=settings.openai_embedding_model,
-        input=text,
-        dimensions=settings.openai_embedding_dimension,
-    )
-    return response.data[0].embedding
+    try:
+        response = client.embeddings.create(
+            model=settings.openai_embedding_model,
+            input=text,
+            dimensions=settings.openai_embedding_dimension,
+        )
+        return response.data[0].embedding
+    except Exception as exc:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "[DUPLICATE] Embedding failed (%s) — returning zero vector, duplicate check skipped", exc
+        )
+        return [0.0] * settings.openai_embedding_dimension
 
 
 def check_for_duplicate(

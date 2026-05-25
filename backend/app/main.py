@@ -1,4 +1,5 @@
 import re
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,7 @@ settings = get_settings()
 _ROUTE_QUERY_PARAMS: list[tuple[str, re.Pattern, set[str]]] = []
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ── Build query-param allowlist from OpenAPI schema ───────────────────────
     schema = app.openapi()
     for path, path_item in schema.get("paths", {}).items():
         regex_str = "^" + re.sub(r"\{[^}]+\}", "[^/]+", path).rstrip("/") + r"/?$"
@@ -29,8 +31,19 @@ async def lifespan(app: FastAPI):
                 if p.get("in") == "query"
             }
             _ROUTE_QUERY_PARAMS.append((method.upper(), pattern, valid))
+
+    # ── Start inbound email poller as a background task ───────────────────────
+    from app.services.email_poller import run_email_poller
+    _poller_task = asyncio.create_task(run_email_poller())
+
     yield
-    # shutdown: nothing to clean up
+
+    # ── Shutdown: cancel the poller and wait for it to exit cleanly ───────────
+    _poller_task.cancel()
+    try:
+        await _poller_task
+    except asyncio.CancelledError:
+        pass
 app = FastAPI(
     title="Unified Complaint Dashboard API",
     description=(
@@ -98,10 +111,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ── Auth middleware ───────────────────────────────────────────────────────────
-# TESTING ONLY — uncomment to re-enable API key auth
-# app.middleware("http")(verify_api_key)
 
 app.add_middleware(_AllowHeaderMiddleware)
 

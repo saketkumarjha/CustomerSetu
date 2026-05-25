@@ -76,12 +76,24 @@ def _oai():
 
 
 def _gen_embedding(text: str) -> list:
-    resp = _oai().embeddings.create(
-        model=settings.openai_embedding_model,
-        input=text,
-        dimensions=settings.openai_embedding_dimension,
-    )
-    return resp.data[0].embedding
+    try:
+        resp = _oai().embeddings.create(
+            model=settings.openai_embedding_model,
+            input=text,
+            dimensions=settings.openai_embedding_dimension,
+        )
+        return resp.data[0].embedding
+    except Exception as exc:
+        # OpenAI embeddings may be geo-restricted from Azure datacenter IPs.
+        # Fall back to a zero vector so the KB entry is saved and the approve
+        # action succeeds. The entry won't appear in semantic search results
+        # until embeddings are regenerated, but all other functionality is intact.
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "[KB] Embedding generation failed — storing zero vector. "
+            "Entry saved but won't appear in semantic search. Error: %s", exc,
+        )
+        return [0.0] * settings.openai_embedding_dimension
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 

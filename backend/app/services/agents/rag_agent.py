@@ -84,13 +84,20 @@ async def retrieve_knowledge(
         # TODO: Replace with actual fetch from escalation history
         return []
 
-    # Generate embedding for the complaint text
-    embed_response = client.embeddings.create(
-        model=settings.openai_embedding_model,
-        input=masked_text,
-        dimensions=settings.openai_embedding_dimension,
-    )
-    embedding = embed_response.data[0].embedding
+    # Generate embedding — fall back to quality-score ranking if geo-restricted
+    try:
+        embed_response = client.embeddings.create(
+            model=settings.openai_embedding_model,
+            input=masked_text,
+            dimensions=settings.openai_embedding_dimension,
+        )
+        embedding = embed_response.data[0].embedding
+    except Exception as _emb_exc:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "[RAG] Embedding failed (%s) — returning top KB entries by quality score", _emb_exc
+        )
+        embedding = None
 
     previous_kb_ids = get_previous_kb_used(complaint_id)
     tier_scope = determine_tier_scope(current_tier, branch_id, zone_id, region)
@@ -116,10 +123,14 @@ async def retrieve_knowledge(
         denom = np.linalg.norm(a) * np.linalg.norm(b)
         return float(np.dot(a, b) / denom) if denom > 0 else 0.0
 
-    for doc in all_results:
-        doc["similarity"] = cosine_similarity(embedding, doc["embedding"])
-
-    all_results.sort(key=lambda d: d["similarity"], reverse=True)
+    if embedding is not None:
+        for doc in all_results:
+            doc["similarity"] = cosine_similarity(embedding, doc["embedding"])
+        all_results.sort(key=lambda d: d["similarity"], reverse=True)
+    else:
+        for doc in all_results:
+            doc["similarity"] = float(doc.get("quality_score") or 0.0)
+        all_results.sort(key=lambda d: d["quality_score"] or 0, reverse=True)
     results = all_results[:n]
 
     # Fallback if < n results: get general tier entries
@@ -129,7 +140,7 @@ async def retrieve_knowledge(
             fallback_query = fallback_query.not_.in_("id", previous_kb_ids)
         fallback_results = fallback_query.execute().data or []
         for doc in fallback_results:
-            doc["similarity"] = cosine_similarity(embedding, doc["embedding"])
+            doc["similarity"] = cosine_similarity(embedding, doc["embedding"]) if embedding is not None else float(doc.get("quality_score") or 0.0)
         fallback_results.sort(key=lambda d: d["similarity"], reverse=True)
         results.extend(fallback_results[:n - len(results)])
 
@@ -197,13 +208,20 @@ def retrieve_context(
         denom = np.linalg.norm(a) * np.linalg.norm(b)
         return float(np.dot(a, b) / denom) if denom > 0 else 0.0
 
-    # Generate embedding for the complaint text
-    embed_resp = client.embeddings.create(
-        model      = settings.openai_embedding_model,
-        input      = masked_text,
-        dimensions = settings.openai_embedding_dimension,
-    )
-    query_embedding = embed_resp.data[0].embedding
+    # Generate embedding — fall back to quality-score ranking if geo-restricted
+    try:
+        embed_resp = client.embeddings.create(
+            model      = settings.openai_embedding_model,
+            input      = masked_text,
+            dimensions = settings.openai_embedding_dimension,
+        )
+        query_embedding = embed_resp.data[0].embedding
+    except Exception as _emb_exc:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            "[RAG] Embedding failed (%s) — using quality-score ranking", _emb_exc
+        )
+        query_embedding = None
 
     # Fetch verified entries — prefer matching category, fall back to all
     try:
@@ -236,10 +254,13 @@ def retrieve_context(
 
     total_in_kb = len(cat_rows)
 
-    # Score and rank
+    # Score and rank — use cosine similarity if embedding available, else quality_score
     for row in cat_rows:
         emb = row.get("embedding")
-        row["similarity"] = _cosine(query_embedding, emb) if emb else 0.0
+        if query_embedding is not None and emb:
+            row["similarity"] = _cosine(query_embedding, emb)
+        else:
+            row["similarity"] = float(row.get("quality_score") or 0.0)
 
     cat_rows.sort(key=lambda r: r["similarity"], reverse=True)
     top = cat_rows[:n]
@@ -280,10 +301,11 @@ def retrieve_context(
             f"Resolution Agent will rely on LLM general knowledge only."
         )
 
+    retrieval_method = "vector_search" if query_embedding is not None else "quality_score_fallback"
     return {
         "documents":             documents,
         "reasoning":             reasoning,
         "total_in_kb":           total_in_kb,
-        "retrieval_method":      "vector_search",
+        "retrieval_method":      retrieval_method,
         "tier_kb_coverage_score": round(tier_kb_coverage_score, 4),
     }

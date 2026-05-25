@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     email_from_address: str = "customercare@unionbankofindia.com"
 
+    # Email IMAP (inbound polling — reads Gmail inbox)
+    imap_host: str = "imap.gmail.com"
+    imap_port: int = 993
+    poll_interval_seconds: int = 30      # env var: POLL_INTERVAL_SECONDS
+    enable_email_poller: bool = True     # env var: ENABLE_EMAIL_POLLER
+
     # Response templates
     tier_templates_path: str = "app/templates/tier_responses/"
 

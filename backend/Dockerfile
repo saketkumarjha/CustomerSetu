@@ -24,4 +24,7 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Single worker: the IMAP poller must run in exactly one process.
+# Multiple workers would create duplicate pollers, each processing the same inbox.
+# B1 tier has 1 vCPU anyway, so --workers 2 provides no throughput benefit.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
