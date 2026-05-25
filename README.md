@@ -2,9 +2,9 @@
 
 <img src="https://img.shields.io/badge/Union%20Bank%20of%20India-iDEA%202.0-003087?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNVYxMkwyIDEydjV6Ii8+PC9zdmc+" alt="iDEA 2.0"/>
 
-# 🏦 ResolvIQ — Intelligent Complaint Resolution Ecosystem
+# 🏦 CustomerSetu — Intelligent Complaint Resolution Ecosystem
 
-### *AI-Powered Multi-Agent Platform for Union Bank of India*
+### _AI-Powered Multi-Agent Platform for Union Bank of India_
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
@@ -25,17 +25,17 @@
 
 Union Bank of India receives thousands of customer complaints daily across multiple channels — email, WhatsApp, web forms, and branches. Today, this process is **manual, slow, and inconsistent**: complaints are mis-classified, duplicates are processed redundantly, RBI TAT (Turn-Around Time) deadlines are missed, and resolution quality varies agent to agent.
 
-**ResolvIQ** solves this with a **Gen-AI powered multi-agent pipeline** that automatically ingests complaints from every channel, detects duplicates via semantic embeddings, classifies by RBI category, generates context-aware resolutions from a live knowledge base, enforces RBI compliance, and auto-escalates from Branch → Zone → Region → Head Office → RBI Ombudsman — all in real time, with full explainability (XAI) and audit trails.
+**CustomerSetu** solves this with a **Gen-AI powered multi-agent pipeline** that automatically ingests complaints from every channel, detects duplicates via semantic embeddings, classifies by RBI category, generates context-aware resolutions from a live knowledge base, enforces RBI compliance, and auto-escalates from Branch → Zone → Region → Head Office → RBI Ombudsman — all in real time, with full explainability (XAI) and audit trails.
 
 ---
 
 ## 🌐 Live Demo
 
-| Resource | Link |
-|----------|------|
-| 🚀 **Live App** | [proud-plant-0e6ce2600.7.azurestaticapps.net](https://proud-plant-0e6ce2600.7.azurestaticapps.net) |
-| 📹 **Demo Video** | *Coming Soon* |
-| 📖 **API Docs** | `/docs` (Swagger UI on deployed backend) |
+| Resource          | Link                                                                                               |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| 🚀 **Live App**   | [proud-plant-0e6ce2600.7.azurestaticapps.net](https://proud-plant-0e6ce2600.7.azurestaticapps.net) |
+| 📹 **Demo Video** | _Coming Soon_                                                                                      |
+| 📖 **API Docs**   | `/docs` (Swagger UI on deployed backend)                                                           |
 
 > If accessing locally: follow the **How to Run Locally** section below.
 
@@ -177,13 +177,13 @@ flowchart LR
 
 **Agent Specialisation Map:**
 
-| Tier | Agents | Domain |
-|------|--------|--------|
-| 0 | Rishi, Alok, Shaunak | UPI/ATM, General Banking, Internet/Mobile |
-| 1 | Saket, Prince | Branch/KYC, Home/Personal Loan |
-| 2 | Shubham | Business Loan, Insurance |
-| 3 | Shubham Kumar | Regional Compliance, Mis-selling |
-| 4–5 | Sarthak | Nodal Office, Fraud, RBI Escalation |
+| Tier | Agents               | Domain                                    |
+| ---- | -------------------- | ----------------------------------------- |
+| 0    | Rishi, Alok, Shaunak | UPI/ATM, General Banking, Internet/Mobile |
+| 1    | Saket, Prince        | Branch/KYC, Home/Personal Loan            |
+| 2    | Shubham              | Business Loan, Insurance                  |
+| 3    | Shubham Kumar        | Regional Compliance, Mis-selling          |
+| 4–5  | Sarthak              | Nodal Office, Fraud, RBI Escalation       |
 
 ---
 
@@ -194,6 +194,7 @@ flowchart LR
 <td width="50%">
 
 ### 🔁 Multi-Channel Ingestion
+
 - **Email:** IMAP polling every 30s (Gmail)
 - **WhatsApp:** Twilio webhook integration with QR onboarding
 - **Web:** React complaint submission form with OCR image support
@@ -203,6 +204,7 @@ flowchart LR
 <td width="50%">
 
 ### 🧠 AI Intelligence
+
 - **PII Masking:** spaCy NER + Microsoft Presidio (names, Aadhaar, phone, account numbers)
 - **Duplicate Detection:** 512-dim OpenAI embeddings + pgvector cosine similarity (>0.92 threshold)
 - **Semantic RAG:** Top-3 knowledge base matches injected into resolution prompt
@@ -213,6 +215,7 @@ flowchart LR
 <td width="50%">
 
 ### ⚖️ RBI Compliance
+
 - TAT rules per RBI category (30-day resolution window)
 - Auto-penalty calculation (₹100/day for TAT breach categories)
 - Real-time SLA countdown with breach alerts
@@ -222,6 +225,7 @@ flowchart LR
 <td width="50%">
 
 ### 📊 Analytics Suite
+
 - **Overview:** KPI cards, channel distribution, complaint feed
 - **AI Performance:** Resolution quality, agent efficiency
 - **Root Cause Analysis:** Category & trend breakdown
@@ -233,6 +237,7 @@ flowchart LR
 <td width="50%">
 
 ### 🧠 KB Auto-Enrichment
+
 - Resolved complaints auto-scored and queued for KB addition
 - Quality threshold gating: ≥0.95 → auto-approve, 0.70–0.95 → admin review
 - Bulk CSV/JSON import with per-row validation
@@ -242,6 +247,7 @@ flowchart LR
 <td width="50%">
 
 ### 🔴 Real-Time Streaming
+
 - Server-Sent Events (SSE) for live pipeline step updates
 - Each agent node streams its status to the Pipeline Viewer tab
 - Rate limiting (10 req/min) with 429 + Retry-After headers
@@ -255,50 +261,54 @@ flowchart LR
 ## 🛠️ Tech Stack
 
 ### Backend
-| Library | Version | Purpose |
-|---------|---------|---------|
-| **FastAPI** | 0.136 | Async REST API framework |
-| **LangGraph** | 1.1.10 | Multi-agent orchestration DAG |
-| **LangChain-OpenAI** | 1.2.1 | GPT-4o integration |
-| **OpenAI SDK** | 2.33 | Embeddings (text-embedding-3-small, 512-dim) |
-| **spaCy** | 3.8 + en_core_web_lg | Named Entity Recognition for PII |
-| **Presidio Analyzer/Anonymizer** | 2.2 | PII detection and masking |
-| **Supabase** | 2.29 | PostgreSQL + pgvector cloud database |
-| **Twilio** | 9.6 | WhatsApp Business API |
-| **imap-tools** | 1.7 | IMAP email polling |
-| **pytesseract** | 0.3 | OCR for image-based complaints |
-| **Pillow** | 12.2 | Image processing |
-| **slowapi** | 0.1.9 | API rate limiting |
-| **sse-starlette** | 3.4 | Server-Sent Events streaming |
-| **pydantic-settings** | 2.14 | Type-safe configuration |
-| **uvicorn** | 0.46 | ASGI server |
-| **numpy** | 2.4 | Cosine similarity computation |
+
+| Library                          | Version              | Purpose                                      |
+| -------------------------------- | -------------------- | -------------------------------------------- |
+| **FastAPI**                      | 0.136                | Async REST API framework                     |
+| **LangGraph**                    | 1.1.10               | Multi-agent orchestration DAG                |
+| **LangChain-OpenAI**             | 1.2.1                | GPT-4o integration                           |
+| **OpenAI SDK**                   | 2.33                 | Embeddings (text-embedding-3-small, 512-dim) |
+| **spaCy**                        | 3.8 + en_core_web_lg | Named Entity Recognition for PII             |
+| **Presidio Analyzer/Anonymizer** | 2.2                  | PII detection and masking                    |
+| **Supabase**                     | 2.29                 | PostgreSQL + pgvector cloud database         |
+| **Twilio**                       | 9.6                  | WhatsApp Business API                        |
+| **imap-tools**                   | 1.7                  | IMAP email polling                           |
+| **pytesseract**                  | 0.3                  | OCR for image-based complaints               |
+| **Pillow**                       | 12.2                 | Image processing                             |
+| **slowapi**                      | 0.1.9                | API rate limiting                            |
+| **sse-starlette**                | 3.4                  | Server-Sent Events streaming                 |
+| **pydantic-settings**            | 2.14                 | Type-safe configuration                      |
+| **uvicorn**                      | 0.46                 | ASGI server                                  |
+| **numpy**                        | 2.4                  | Cosine similarity computation                |
 
 ### Frontend
-| Library | Version | Purpose |
-|---------|---------|---------|
-| **React** | 18 | Component UI framework |
-| **TypeScript** | 5 | Type-safe JavaScript |
-| **Vite** | Latest | Build tooling & dev server |
-| **Tailwind CSS** | 3 | Utility-first styling |
-| **React Router DOM** | 6 | Client-side routing |
-| **Lucide React** | Latest | Icon library |
-| **EventSource (SSE)** | Native | Real-time pipeline streaming |
+
+| Library               | Version | Purpose                      |
+| --------------------- | ------- | ---------------------------- |
+| **React**             | 18      | Component UI framework       |
+| **TypeScript**        | 5       | Type-safe JavaScript         |
+| **Vite**              | Latest  | Build tooling & dev server   |
+| **Tailwind CSS**      | 3       | Utility-first styling        |
+| **React Router DOM**  | 6       | Client-side routing          |
+| **Lucide React**      | Latest  | Icon library                 |
+| **EventSource (SSE)** | Native  | Real-time pipeline streaming |
 
 ### Infrastructure
-| Service | Purpose |
-|---------|---------|
-| **Azure Static Web Apps** | Frontend hosting |
-| **Supabase** | PostgreSQL + pgvector (vector similarity search) |
-| **Gmail (SMTP/IMAP)** | Inbound email polling + outbound replies |
-| **Twilio** | WhatsApp webhook & message delivery |
-| **OpenAI** | GPT-4o (classification, resolution) + text-embedding-3-small |
+
+| Service                   | Purpose                                                      |
+| ------------------------- | ------------------------------------------------------------ |
+| **Azure Static Web Apps** | Frontend hosting                                             |
+| **Supabase**              | PostgreSQL + pgvector (vector similarity search)             |
+| **Gmail (SMTP/IMAP)**     | Inbound email polling + outbound replies                     |
+| **Twilio**                | WhatsApp webhook & message delivery                          |
+| **OpenAI**                | GPT-4o (classification, resolution) + text-embedding-3-small |
 
 ---
 
 ## 🚀 How to Run Locally
 
 ### Prerequisites
+
 - Python 3.11+
 - Node.js 20+
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) installed at `C:\Program Files\Tesseract-OCR\tesseract.exe` (Windows) or `/usr/bin/tesseract` (Linux/Mac)
@@ -307,12 +317,14 @@ flowchart LR
 - (Optional) Twilio account for WhatsApp
 
 ### 1. Clone the Repository
+
 ```bash
-git clone https://github.com/your-team/resolviq
-cd resolviq
+git clone https://github.com/your-team/CustomerSetu
+cd CustomerSetu
 ```
 
 ### 2. Backend Setup
+
 ```bash
 cd backend
 
@@ -329,7 +341,9 @@ python -m spacy download en_core_web_lg
 ```
 
 ### 3. Configure Environment Variables
+
 Create `backend/.env`:
+
 ```env
 # OpenAI
 OPENAI_API_KEY=sk-...
@@ -365,13 +379,16 @@ FRONTEND_BASE_URL=http://localhost:5173
 ```
 
 ### 4. Start the Backend
+
 ```bash
 cd backend
 uvicorn app.main:app --reload --port 8000
 ```
+
 API docs available at: **http://localhost:8000/docs**
 
 ### 5. Frontend Setup
+
 ```bash
 cd frontend
 
@@ -384,16 +401,20 @@ npm install
 # Start dev server
 npm run dev
 ```
+
 Open your browser at: **http://localhost:5173**
 
 ### 6. (Optional) Database Schema
+
 Run the Supabase migrations in order. The required tables are:
+
 - `complaints` — main complaint records with pgvector embedding column `VECTOR(512)`
 - `knowledge_base` — resolution KB with embedding column `VECTOR(512)`
 - `kb_enrichment_queue` — auto-generated KB candidates awaiting review
 - `agent_assignments` — tier-to-agent routing
 
 Enable the `vector` extension in Supabase SQL editor:
+
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
@@ -403,7 +424,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ## 📁 Project Structure
 
 ```
-resolviq/
+CustomerSetu/
 ├── backend/
 │   ├── app/
 │   │   ├── api/v1/routes/          # FastAPI route handlers
@@ -463,9 +484,11 @@ resolviq/
 All data is **real-time and system-generated** — no pre-existing dataset required.
 
 ### Synthetic Seed Data (for demo/testing)
+
 The system is designed for live operation. For local testing, you can seed the knowledge base using the built-in bulk import endpoint.
 
 **Sample KB entries (CSV format):**
+
 ```csv
 tier_level,tier_scope,category,issue_type,resolution_text,quality_score,verified
 0,,UPI,Transaction Failed,"Dear Customer, we have investigated your UPI failed transaction. As per RBI TAT guidelines, the reversal will be processed within 5 working days. We sincerely apologize.",0.90,true
@@ -474,6 +497,7 @@ tier_level,tier_scope,category,issue_type,resolution_text,quality_score,verified
 ```
 
 **Download the import template directly from the running API:**
+
 ```bash
 # CSV template
 curl http://localhost:8000/api/v1/admin/kb/templates/csv -o kb_template.csv
@@ -483,6 +507,7 @@ curl http://localhost:8000/api/v1/admin/kb/templates/json -o kb_template.json
 ```
 
 **Import into knowledge base:**
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/admin/kb/bulk-import \
   -H "X-API-Key: your-api-key" \
@@ -490,7 +515,9 @@ curl -X POST http://localhost:8000/api/v1/admin/kb/bulk-import \
 ```
 
 ### How Complaint Data Is Generated
+
 The platform generates data organically as complaints flow through the pipeline:
+
 - **Complaint embeddings:** Auto-generated at submission time using OpenAI `text-embedding-3-small` (512-dim)
 - **KB auto-enrichment:** After each resolution, the system scores and queues high-quality resolutions (confidence ≥ 0.70) for KB addition
 - **Auto-approval:** Entries scoring ≥ 0.95 are automatically promoted to the knowledge base without manual review
@@ -499,60 +526,60 @@ The platform generates data organically as complaints flow through the pipeline:
 
 ## ⚠️ Known Limitations
 
-| Limitation | Detail |
-|-----------|--------|
-| **No offline mode** | The pipeline requires live OpenAI API access. If the API is geo-restricted (e.g., Azure datacenter IPs), embeddings fall back to quality-score ranking, and GPT-4o calls will fail gracefully with a logged error. |
-| **Single-tenant** | The current schema does not support multi-bank tenancy. Branch/zone/region IDs are hardcoded per deployment. |
-| **WhatsApp sandbox** | The Twilio integration uses the WhatsApp sandbox (Twilio test number). Production requires a WhatsApp Business API approved number. |
-| **Email polling latency** | IMAP poller runs every 30s by default. Near-real-time email processing requires upgrading to Gmail Push Notifications (Pub/Sub). |
-| **No model retraining** | The RAG agent uses static embeddings. The knowledge base improves incrementally, but the base LLM (GPT-4o) does not retrain on domain data. Fine-tuning would require a separate pipeline. |
-| **OCR accuracy** | Tesseract OCR works best on clean, printed documents. Handwritten complaints or low-resolution scans may produce poor extractions. |
-| **Escalation loop guard** | The escalation system has a hard cap of 5 hops and a 10-second cooldown per tier to prevent rapid-fire escalation. In edge cases this may delay legitimate escalations. |
-| **pgvector similarity search** | Vector search scales to ~100K complaints without indexing. Beyond that, an HNSW or IVFFlat index on the `embedding` column is needed for acceptable latency. |
+| Limitation                     | Detail                                                                                                                                                                                                             |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **No offline mode**            | The pipeline requires live OpenAI API access. If the API is geo-restricted (e.g., Azure datacenter IPs), embeddings fall back to quality-score ranking, and GPT-4o calls will fail gracefully with a logged error. |
+| **Single-tenant**              | The current schema does not support multi-bank tenancy. Branch/zone/region IDs are hardcoded per deployment.                                                                                                       |
+| **WhatsApp sandbox**           | The Twilio integration uses the WhatsApp sandbox (Twilio test number). Production requires a WhatsApp Business API approved number.                                                                                |
+| **Email polling latency**      | IMAP poller runs every 30s by default. Near-real-time email processing requires upgrading to Gmail Push Notifications (Pub/Sub).                                                                                   |
+| **No model retraining**        | The RAG agent uses static embeddings. The knowledge base improves incrementally, but the base LLM (GPT-4o) does not retrain on domain data. Fine-tuning would require a separate pipeline.                         |
+| **OCR accuracy**               | Tesseract OCR works best on clean, printed documents. Handwritten complaints or low-resolution scans may produce poor extractions.                                                                                 |
+| **Escalation loop guard**      | The escalation system has a hard cap of 5 hops and a 10-second cooldown per tier to prevent rapid-fire escalation. In edge cases this may delay legitimate escalations.                                            |
+| **pgvector similarity search** | Vector search scales to ~100K complaints without indexing. Beyond that, an HNSW or IVFFlat index on the `embedding` column is needed for acceptable latency.                                                       |
 
 ---
 
 ## 📊 Performance Metrics (on Live Demo Data)
 
-| Metric | Value |
-|--------|-------|
-| Duplicate detection threshold | cosine similarity > **0.92** |
-| Embedding dimensions | **512** (Matryoshka, 95% accuracy at 1/3 storage) |
-| KB auto-approve threshold | quality score ≥ **0.95** |
-| KB review threshold | quality score ≥ **0.70** |
-| RBI resolution SLA | **30 calendar days** (all categories) |
-| Rate limit | **10 requests/minute** per client |
-| Email poll interval | **30 seconds** |
-| Max escalation hops | **5** (Tier 0 → RBI Ombudsman) |
-| Max file size (OCR upload) | **10 MB** |
+| Metric                        | Value                                             |
+| ----------------------------- | ------------------------------------------------- |
+| Duplicate detection threshold | cosine similarity > **0.92**                      |
+| Embedding dimensions          | **512** (Matryoshka, 95% accuracy at 1/3 storage) |
+| KB auto-approve threshold     | quality score ≥ **0.95**                          |
+| KB review threshold           | quality score ≥ **0.70**                          |
+| RBI resolution SLA            | **30 calendar days** (all categories)             |
+| Rate limit                    | **10 requests/minute** per client                 |
+| Email poll interval           | **30 seconds**                                    |
+| Max escalation hops           | **5** (Tier 0 → RBI Ombudsman)                    |
+| Max file size (OCR upload)    | **10 MB**                                         |
 
 ---
 
 ## 👥 Team
 
-| Name | Role & Contributions |
-|------|---------------------|
-| **Saket** | Backend architecture, LangGraph pipeline, escalation engine, email/WhatsApp integration |
-| **Anijeet** | Frontend React dashboard, SSE pipeline viewer, analytics suite, KB admin UI |
-| **[Team Member 3]** | RAG knowledge base design, Supabase schema, pgvector integration |
-| **[Team Member 4]** | RBI compliance module, TAT rules engine, SLA monitoring, domain research |
+| Name                | Role & Contributions                                                                    |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| **Saket**           | Backend architecture, LangGraph pipeline, escalation engine, email/WhatsApp integration |
+| **Anijeet**         | Frontend React dashboard, SSE pipeline viewer, analytics suite, KB admin UI             |
+| **[Team Member 3]** | RAG knowledge base design, Supabase schema, pgvector integration                        |
+| **[Team Member 4]** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
 
 ---
 
 ## 📬 Contact
 
-| | |
-|--|--|
-| **Team Name** | ResolvIQ |
-| **Institute** | *[Your College Name]* |
-| **Email** | jhasaket99dbg@gmail.com |
-| **Hackathon** | iDEA 2.0 — Phase 2 Submission |
+|               |                                                                        |
+| ------------- | ---------------------------------------------------------------------- |
+| **Team Name** | CustomerSetu                                                           |
+| **Institute** | _RGIPT(an institution of national Importance, along the line of IITs)_ |
+| **Email**     | jhasaket99dbg@gmail.com                                                |
+| **Hackathon** | iDEA 2.0 — Phase 2 Submission                                          |
 
 ---
 
 <div align="center">
 
-**Built with ❤️ for Union Bank of India · iDEA 2.0 Hackathon 2025**
+**Built for Union Bank of India · iDEA 2.0 Hackathon 2026**
 
 [![FastAPI](https://img.shields.io/badge/-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/-LangGraph-FF6B35?style=flat-square)](https://langchain-ai.github.io/langgraph/)
