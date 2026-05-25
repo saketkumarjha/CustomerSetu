@@ -54,14 +54,14 @@ graph TB
 
     subgraph PIPELINE["🤖 LangGraph Multi-Agent AI Pipeline"]
         direction TB
-        B1["🔒 PII Masking Agent\n(spaCy + Presidio)"]
-        B2["🔍 Duplicate Detection Agent\n(OpenAI Embeddings + pgvector)"]
-        B3["🏷️ Classification Agent\n(GPT-4o → RBI Category)"]
-        B4["💬 Sentiment Analysis Agent\n(GPT-4o → Urgency Score)"]
-        B5["📚 RAG Memory Agent\n(Top-3 semantic KB matches)"]
-        B6["✍️ Resolution Agent\n(GPT-4o + KB context)"]
-        B7["⚖️ RBI Compliance Agent\n(TAT enforcement + penalties)"]
-        B8["📊 SLA & Routing Agent\n(Tier assignment + escalation)"]
+        B1["🔒 PII Masking Agent — spaCy + Presidio"]
+        B2["🔍 Duplicate Detection — Embeddings + pgvector"]
+        B3["🏷️ Classification Agent — GPT-4o RBI Category"]
+        B4["💬 Sentiment Agent — GPT-4o Urgency Score"]
+        B5["📚 RAG Memory Agent — Top-3 KB Matches"]
+        B6["✍️ Resolution Agent — GPT-4o + KB Context"]
+        B7["⚖️ RBI Compliance — TAT + Penalties"]
+        B8["📊 SLA and Routing — Tier Assignment"]
     end
 
     subgraph ESCALATION["🔺 Auto-Escalation Engine"]
@@ -76,7 +76,7 @@ graph TB
 
     subgraph STORAGE["🗄️ Supabase / pgvector"]
         D1[(Complaints DB)]
-        D2[(Knowledge Base\n+ Embeddings)]
+        D2[(Knowledge Base + Embeddings)]
         D3[(KB Enrichment Queue)]
         D4[(Audit Trail)]
     end
@@ -84,7 +84,7 @@ graph TB
     subgraph FRONTEND["💻 React Dashboard"]
         E1[📈 Overview & KPIs]
         E2[🗂️ Complaints Manager]
-        E3[🔬 Pipeline Viewer\n(Real-time SSE)]
+        E3[🔬 Pipeline Viewer — SSE Streaming]
         E4[👤 Agent Desk]
         E5[📊 Analytics Suite]
         E6[📋 RBI Compliance View]
