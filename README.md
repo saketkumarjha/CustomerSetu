@@ -36,7 +36,7 @@ Union Bank of India receives thousands of customer complaints daily across multi
 | 🚀 **Live App**   | [proud-plant-0e6ce2600.7.azurestaticapps.net](https://proud-plant-0e6ce2600.7.azurestaticapps.net) |
 | 📹 **Demo Video** | _Coming Soon_                                                                                      |
 | 📖 **API Docs**   | `/docs` (Swagger UI on deployed backend)                                                           |
-
+F
 > If accessing locally: follow the **How to Run Locally** section below.
 
 ---
@@ -240,176 +240,104 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 | 3    | Shubham Kumar        | Regional Compliance, Mis-selling          |
 | 4–5  | Sarthak              | Nodal Office, Fraud, RBI Escalation       |
 
-```md
 ---
 
 ## ✨ Key Features
 
 <table>
-
 <tr>
-
 <td width="50%">
 
 ### 🔁 Multi-Channel Ingestion
 
 - **Email:** IMAP polling every 30s (Gmail)
-
 - **WhatsApp:** Twilio webhook integration with QR onboarding
-
 - **Web:** React complaint submission form with OCR image support
-
 - **Branch:** Direct entry via Agent Desk
 
 </td>
+<td width="50%"> 
+    ### 🔍 Explainable AI (No Black Box Responses)
+    - Every AI-generated resolution includes a **“Why this response?”** explanation panel 
+    - Shows: 
+    - matched RBI rule/policy -
+    retrieved KB references 
+    -vector similarity score 
+    - routing confidence score -
+    Full AI reasoning trail visible to supervisors and auditors 
+    - Human agents can override AI decisions with feedback logging 
+    - All retrieval sources used by the LLM are transparently displayed 
+    - Ensures RBI-compliant, auditable, and trustworthy AI-assisted complaint resolution </td>
 
 <td width="50%">
 
 ### 🧠 AI Intelligence
 
 - **PII Masking:** spaCy NER + Microsoft Presidio (names, Aadhaar, phone, account numbers)
-
 - **Duplicate Detection:** 512-dim OpenAI embeddings + pgvector cosine similarity (>0.92 threshold)
-
 - **Semantic RAG:** Top-3 knowledge base matches injected into resolution prompt
 
-- **Smart Complaint Routing:** AI assigns complaints to the correct team using intent, severity, and historical resolution success
-
-- **Fraud & Urgency Detection:** Flags suspicious or high-priority complaints for immediate escalation
-
 </td>
-
 </tr>
-
 <tr>
-
-<td width="50%">
-
-### 🔍 Explainable AI (No Black Box Responses)
-
-- Every AI-generated resolution includes a **“Why this response?”** explanation panel
-
-- Shows:
-  - matched RBI rule/policy
-  - retrieved KB references
-  - vector similarity score
-  - routing confidence score
-
-- Full AI reasoning trail visible to supervisors and auditors
-
-- Human agents can override AI decisions with feedback logging
-
-- All retrieval sources used by the LLM are transparently displayed
-
-- Ensures RBI-compliant, auditable, and trustworthy AI-assisted complaint resolution
-
-</td>
-
 <td width="50%">
 
 ### ⚖️ RBI Compliance
 
 - TAT rules per RBI category (30-day resolution window)
-
 - Auto-penalty calculation (₹100/day for TAT breach categories)
-
 - Real-time SLA countdown with breach alerts
-
 - Full RBI compliance view and override audit trail
 
-- Ombudsman escalation workflow for unresolved complaints
-
 </td>
-
-</tr>
-
-<tr>
-
 <td width="50%">
 
 ### 📊 CSAT Score & Customer Feedback
 
 - **1–5 star CSAT rating** collected post-resolution via the customer's original channel (email/WhatsApp/web)
-
 - **Issue tags** (multi-select): `too_slow`, `wrong_solution`, `rude`, `incomplete`
-
 - **Free-text feedback** — PII auto-masked before storage
-
 - **Combined RL Score** = `(agent_score × 0.4) + (customer_rating/5 × 0.6)`
-
 - Score ≥ 0.85 → resolution **auto-promoted to Knowledge Base** (closes the RAG improvement loop)
-
 - Score below threshold → **router calibration triggered** to improve future routing decisions
-
 - CSAT trends visible in Analytics: by category, channel, resolution type, weekly trend, issue tag frequency
-
 - Fine-tune dataset accumulates `(prompt, completion)` pairs; export via `GET /api/v1/feedback/export-dataset` as JSONL for LLaMA fine-tuning (500+ records recommended)
 
 </td>
-
+<td width="50%"> 
+    ### 🛡️ Enterprise Reliability & Security 
+    - JWT + role-based authentication (Admin, Agent, Supervisor)
+    - Full audit logs for every complaint action and AI override
+    - End-to-end encrypted complaint storage 
+    - Redis queue + retry handling for resilient async processing 
+    - Azure cloud deployment with scalable architecture 
+    - API-first backend with monitoring and observability support 
+</td>
+</tr>
+<tr>
 <td width="50%">
 
 ### 🧠 KB Auto-Enrichment
 
 - Resolved complaints auto-scored and queued for KB addition
-
 - Quality threshold gating: ≥0.95 → auto-approve, 0.70–0.95 → admin review
-
 - Bulk CSV/JSON import with per-row validation
-
 - Tier-scoped entries (Branch → Ombudsman level)
 
-- AI continuously improves from verified resolutions and customer feedback loops
-
 </td>
-
-</tr>
-
-<tr>
-
 <td width="50%">
 
 ### 🔴 Real-Time Streaming
 
 - Server-Sent Events (SSE) for live pipeline step updates
-
 - Each agent node streams its status to the Pipeline Viewer tab
-
-- Live AI workflow tracing:
-  - ingestion
-  - masking
-  - duplicate detection
-  - routing
-  - resolution
-  - escalation
-
 - Rate limiting (10 req/min) with 429 + Retry-After headers
 
 </td>
-
-<td width="50%">
-
-### 🛡️ Enterprise Reliability & Security
-
-- JWT + role-based authentication (Admin, Agent, Supervisor)
-
-- Full audit logs for every complaint action and AI override
-
-- End-to-end encrypted complaint storage
-
-- Redis queue + retry handling for resilient async processing
-
-- Azure cloud deployment with scalable architecture
-
-- API-first backend with monitoring and observability support
-
-</td>
-
 </tr>
-
 </table>
-```
 
+---
 
 ## 🧠 Knowledge Base Admin — How It Works
 
@@ -968,8 +896,8 @@ The platform generates data organically as complaints flow through the pipeline:
 | ------------------- | --------------------------------------------------------------------------------------- |
 | **Saket**           | Backend architecture, LangGraph pipeline, escalation engine, email/WhatsApp integration |
 | **Anijeet**         | Frontend React dashboard, SSE pipeline viewer, analytics suite, KB admin UI             |
-| **Alok** | RAG knowledge base design, Supabase schema, pgvector integration                        |
-| **Rishi** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
+| **[Team Member 3]** | RAG knowledge base design, Supabase schema, pgvector integration                        |
+| **[Team Member 4]** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
 
 ---
 
