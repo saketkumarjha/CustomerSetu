@@ -874,8 +874,8 @@ The platform generates data organically as complaints flow through the pipeline:
 | ------------------- | --------------------------------------------------------------------------------------- |
 | **Saket**           | Backend architecture, LangGraph pipeline, escalation engine, email/WhatsApp integration |
 | **Anijeet**         | Frontend React dashboard, SSE pipeline viewer, analytics suite, KB admin UI             |
-| **[Team Member 3]** | RAG knowledge base design, Supabase schema, pgvector integration                        |
-| **[Team Member 4]** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
+| **Alok** | RAG knowledge base design, Supabase schema, pgvector integration                        |
+| **Rishi** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
 
 ---
 
