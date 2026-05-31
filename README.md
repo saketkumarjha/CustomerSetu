@@ -256,19 +256,6 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 - **Branch:** Direct entry via Agent Desk
 
 </td>
-<td width="50%"> 
-    ### 🔍 Explainable AI (No Black Box Responses)
-    - Every AI-generated resolution includes a **“Why this response?”** explanation panel 
-    - Shows: 
-    - matched RBI rule/policy -
-    retrieved KB references 
-    -vector similarity score 
-    - routing confidence score -
-    Full AI reasoning trail visible to supervisors and auditors 
-    - Human agents can override AI decisions with feedback logging 
-    - All retrieval sources used by the LLM are transparently displayed 
-    - Ensures RBI-compliant, auditable, and trustworthy AI-assisted complaint resolution </td>
-
 <td width="50%">
 
 ### 🧠 AI Intelligence
@@ -303,15 +290,6 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 - CSAT trends visible in Analytics: by category, channel, resolution type, weekly trend, issue tag frequency
 - Fine-tune dataset accumulates `(prompt, completion)` pairs; export via `GET /api/v1/feedback/export-dataset` as JSONL for LLaMA fine-tuning (500+ records recommended)
 
-</td>
-<td width="50%"> 
-    ### 🛡️ Enterprise Reliability & Security 
-    - JWT + role-based authentication (Admin, Agent, Supervisor)
-    - Full audit logs for every complaint action and AI override
-    - End-to-end encrypted complaint storage 
-    - Redis queue + retry handling for resilient async processing 
-    - Azure cloud deployment with scalable architecture 
-    - API-first backend with monitoring and observability support 
 </td>
 </tr>
 <tr>
@@ -896,8 +874,8 @@ The platform generates data organically as complaints flow through the pipeline:
 | ------------------- | --------------------------------------------------------------------------------------- |
 | **Saket**           | Backend architecture, LangGraph pipeline, escalation engine, email/WhatsApp integration |
 | **Anijeet**         | Frontend React dashboard, SSE pipeline viewer, analytics suite, KB admin UI             |
-| **[Team Member 3]** | RAG knowledge base design, Supabase schema, pgvector integration                        |
-| **[Team Member 4]** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
+| **Alok** | RAG knowledge base design, Supabase schema, pgvector integration                        |
+| **Rishi** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
 
 ---
 
