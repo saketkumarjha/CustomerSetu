@@ -261,6 +261,7 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 ### 🧠 AI Intelligence
 
 - **PII Masking:** spaCy NER + Microsoft Presidio (names, Aadhaar, phone, account numbers)
+- **XAI:** Every Decision Taken By AI is explainable and reflected wheen it is taking so we can trust them completely
 - **Duplicate Detection:** 512-dim OpenAI embeddings + pgvector cosine similarity (>0.92 threshold)
 - **Semantic RAG:** Top-3 knowledge base matches injected into resolution prompt
 
