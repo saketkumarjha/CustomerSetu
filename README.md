@@ -255,10 +255,10 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 - **Compliance Agent:** You are an RBI (Reserve Bank of India) compliance specialist
 - **Severity Agent:** You are a complaint severity assessor at an Indian bank.
 - **Grounding Agent:** You are a senior compliance reviewer at an Indian bank.
--** PII Agent: ** Ensure no personal info leak to the third party.
--** RAG Agent: ** Retrieve top-n most semantically similar resolutions from knowledge_base with tier-awareness.
--** Routing Agent: ** Take the primary routing decision for a complaint as a specialist.
--** Resolution Agent: ** Return structured JSON: draft, root_cause, action_steps, confidence and many similar things specialist.
+-**PII Agent:** Ensure no personal info leak to the third party.
+-**RAG Agent:** Retrieve top-n most semantically similar resolutions from knowledge_base with tier-awareness.
+-**Routing Agent:** Take the primary routing decision for a complaint as a specialist.
+-**Resolution Agent:** Return structured JSON: draft, root_cause, action_steps, confidence and many similar things specialist.
 
 </td>
 <td width="50%">
