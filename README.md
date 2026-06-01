@@ -33,9 +33,9 @@ Union Bank of India receives thousands of customer complaints daily across multi
 
 | Resource          | Link                                                                                               |
 | ----------------- | -------------------------------------------------------------------------------------------------- |
-| 🚀 **Live App**   | [proud-plant-0e6ce2600.7.azurestaticapps.net](https://proud-plant-0e6ce2600.7.azurestaticapps.net) |
-| 📹 **Demo Video** | _Coming Soon_                                                                                      |
-| 📖 **API Docs**   | `/docs` (Swagger UI on deployed backend)                                                           |
+| 🚀 **Live App**   |  Not Uploaded for security Purpose |
+| 📹 **Demo Video** |                                                                                 |
+| 📖 **API Docs**   |                                                |
 F
 > If accessing locally: follow the **How to Run Locally** section below.
 
