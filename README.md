@@ -2,7 +2,7 @@
 
 <img src="https://img.shields.io/badge/Union%20Bank%20of%20India-iDEA%202.0-003087?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2ZmZiIgZD0iTTEyIDJMMiA3bDEwIDUgMTAtNS0xMC01ek0yIDE3bDEwIDUgMTAtNVYxMkwyIDEydjV6Ii8+PC9zdmc+" alt="iDEA 2.0"/>
 
-# 🏦 CustomerSetu
+# 🏦 CustomerSetu — Intelligent Complaint Resolution Ecosystem
 
 ### _AI-Powered Multi-Agent Platform for Union Bank of India_
 
@@ -31,12 +31,14 @@ Union Bank of India receives thousands of customer complaints daily across multi
 
 ## 🌐 Live Demo
 
-| Resource          | Link                                                                                               |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| 🚀 **Live App**   |  Not Uploaded for security Purpose |
-| 📹 **Demo Video** |                                                                                 |
-| 📖 **API Docs**   |                                                |
+| Resource          | Link                                                                                                |
+| ----------------- | --------------------------------------------------------------------------------------------------- |
+| 🚀 **Live App**   | --------------------------------------------------------------------------------------------------- |
+| 📹 **Demo Video** | --------------------------------------------------------------------------------------------------- |
+| 📖 **API Docs**   | --------------------------------------------------------------------------------------------------- |
+
 F
+
 > If accessing locally: follow the **How to Run Locally** section below.
 
 ---
@@ -248,17 +250,12 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 <tr>
 <td width="50%">
 
-### 🔁 10 Ai Agent Specialist of their own field
+### 🔁 Multi-Channel Ingestion
 
-- **Classification Agent:** You are a banking complaint classification specialist
-- **Sentiment Agent:** You are an expert in customer emotion analysis
-- **Compliance Agent:** You are an RBI (Reserve Bank of India) compliance specialist
-- **Severity Agent:** You are a complaint severity assessor at an Indian bank.
-- **Grounding Agent:** You are a senior compliance reviewer at an Indian bank.
--**PII Agent:** Ensure no personal info leak to the third party.
--**RAG Agent:** Retrieve top-n most semantically similar resolutions from knowledge_base with tier-awareness.
--**Routing Agent:** Take the primary routing decision for a complaint as a specialist.
--**Resolution Agent:** Return structured JSON: draft, root_cause, action_steps, confidence and many similar things specialist.
+- **Email:** IMAP polling every 30s (Gmail)
+- **WhatsApp:** Twilio webhook integration with QR onboarding
+- **Web:** React complaint submission form with OCR image support
+- **Branch:** Direct entry via Agent Desk
 
 </td>
 <td width="50%">
@@ -266,7 +263,6 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 ### 🧠 AI Intelligence
 
 - **PII Masking:** spaCy NER + Microsoft Presidio (names, Aadhaar, phone, account numbers)
-- **XAI:** Every Decision Taken By AI is explainable and reflected wheen it is taking so we can trust them completely
 - **Duplicate Detection:** 512-dim OpenAI embeddings + pgvector cosine similarity (>0.92 threshold)
 - **Semantic RAG:** Top-3 knowledge base matches injected into resolution prompt
 
@@ -316,6 +312,31 @@ Every escalation event is tracked in the `escalation_events` table for analytics
 - Server-Sent Events (SSE) for live pipeline step updates
 - Each agent node streams its status to the Pipeline Viewer tab
 - Rate limiting (10 req/min) with 429 + Retry-After headers
+
+</td>
+</tr>
+<tr>
+<td width="100%" colspan="2">
+
+### 🔍 Explainable AI (XAI) — No Black Box
+
+Unlike systems that return a resolution with no reasoning, **every single agent decision in CustomerSetu is fully explained**. The Pipeline Viewer tab shows the complete reasoning chain in real time:
+
+| Agent                    | What it explains                                                                                                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PII Agent**            | Which entity types were detected and masked (e.g., `PHONE`, `AADHAAR`, `PERSON`) — never the values, only the types                                                     |
+| **Duplicate Agent**      | Cosine similarity score against every matched complaint, total complaints searched, why it was flagged unique or duplicate                                              |
+| **Classification Agent** | Chosen category + confidence %, runner-up category, exact evidence tokens from the complaint text that drove the decision                                               |
+| **Sentiment Agent**      | Emotion label (Calm → Furious), urgency score 1–10, trigger phrases extracted verbatim, why escalation was or wasn't flagged                                            |
+| **Compliance Agent**     | Which of 14 RBI categories matched, regulation reference (circular name), why `supervisor_override` was or wasn't triggered                                             |
+| **Severity Agent**       | Severity 1–5 with full scoring breakdown: financial loss (+2), legal threat (+2), RBI category (+2), repeat signal (+1), time-sensitive (+1)                            |
+| **RAG Agent**            | Which KB documents were retrieved, their similarity scores, tier level, why they were selected over others                                                              |
+| **Resolution Agent**     | Confidence %, whether it meets the auto-respond threshold, root cause identified, resolution type, whether authority is sufficient at this tier                         |
+| **Grounding Agent**      | Grounding score 0–100%, specific claims flagged as unverifiable, positive aspects confirmed, overall assessment (`SAFE_TO_SEND` / `VERIFY_BEFORE_SEND` / `DO_NOT_SEND`) |
+| **Routing Agent**        | Exact rule that fired (override or confidence gate), risk score breakdown across 5 signals, SLA deadline, tier hint                                                     |
+| **Escalation Analyzer**  | Why this tier was chosen, which signals triggered escalation, confidence at each tier hop, full escalation path                                                         |
+
+Every decision is written to the `agent_decisions` audit table and surfaced in the complaint detail view. Human agents see **exactly why** the AI made each decision — not just the output. This is the core differentiator from black-box AI systems.
 
 </td>
 </tr>
@@ -755,14 +776,14 @@ CustomerSetu/
 │   │
 │   ├── migrations/
 │   │   ├── 008_populate_tier_kb.py
-│   │   ├── 009_add_kb_dashboard_columns.sql
-│   │   ├── 009_agent_dashboard_table.sql
-│   │   ├── 010_enhance_kb_enrichment_queue.sql
-│   │   ├── 011_resize_embedding_to_512.sql
-│   │   ├── 012_add_pipeline_analysis_columns.sql
-│   │   ├── add_agent_queue_tables.sql
-│   │   ├── add_escalation_tracking_columns.sql
-│   │   ├── add_response_tracking_columns.sql
+│   │   ├──
+│   │   ├──
+│   │   ├──
+│   │   ├──
+│   │   ├──
+│   │   ├──
+│   │   ├──
+│   │   ├──
 │   │   └── ensure_escalation_status_schema.sql
 │   │
 │   └── tests/
@@ -845,12 +866,12 @@ The platform generates data organically as complaints flow through the pipeline:
 
 | Limitation                     | Detail                                                                                                                                                                                                             |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **No offline mode**            | The pipeline requires live OpenAI API access. If the API is geo-restricted (e.g., Azure datacenter IPs), embeddings fall back to quality-score ranking, and GPT-4o calls will fail gracefully and assigned to fallback system.|
+| **No offline mode**            | The pipeline requires live OpenAI API access. If the API is geo-restricted (e.g., Azure datacenter IPs), embeddings fall back to quality-score ranking, and GPT-4o calls will fail gracefully with a logged error. |
 | **Single-tenant**              | The current schema does not support multi-bank tenancy. Branch/zone/region IDs are hardcoded per deployment.                                                                                                       |
 | **WhatsApp sandbox**           | The Twilio integration uses the WhatsApp sandbox (Twilio test number). Production requires a WhatsApp Business API approved number.                                                                                |
 | **Email polling latency**      | IMAP poller runs every 30s by default. Near-real-time email processing requires upgrading to Gmail Push Notifications (Pub/Sub).                                                                                   |
-                                                                                                                                                                                                                                                      |
-| **OCR accuracy**               | Tesseract OCR works best on clean, printed documents. Handwritten complaints or low-resolution scans may produce poor extractions. (This is just POC We will work on it for production grade)                                                                                                                                                                                                                                                                                             |
+| **No model retraining**        | The RAG agent uses static embeddings. The knowledge base improves incrementally, but the base LLM (GPT-4o) does not retrain on domain data. Fine-tuning would require a separate pipeline.                         |
+| **OCR accuracy**               | Tesseract OCR works best on clean, printed documents. Handwritten complaints or low-resolution scans may produce poor extractions.                                                                                 |
 | **Escalation loop guard**      | The escalation system has a hard cap of 5 hops and a 10-second cooldown per tier to prevent rapid-fire escalation. In edge cases this may delay legitimate escalations.                                            |
 | **pgvector similarity search** | Vector search scales to ~100K complaints without indexing. Beyond that, an HNSW or IVFFlat index on the `embedding` column is needed for acceptable latency.                                                       |
 
@@ -876,12 +897,12 @@ The platform generates data organically as complaints flow through the pipeline:
 
 ## 👥 Team
 
-| Name                | Role & Contributions                                                                    |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| **Saket**           | Backend architecture, LangGraph pipeline, escalation engine, email/WhatsApp integration |
-| **Anijeet**         | Frontend React dashboard, SSE pipeline viewer, analytics suite, KB admin UI             |
-| **Alok** | RAG knowledge base design, Supabase schema, pgvector integration                        |
-| **Rishi** | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
+| Name        | Role & Contributions                                                                    |
+| ----------- | --------------------------------------------------------------------------------------- |
+| **Saket**   | Backend architecture, LangGraph pipeline, escalation engine, email/WhatsApp integration |
+| **Anijeet** | Frontend React dashboard, SSE pipeline viewer, analytics suite, KB admin UI             |
+| **Alok**    | RAG knowledge base design, Supabase schema, pgvector integration                        |
+| **Rishi**   | RBI compliance module, TAT rules engine, SLA monitoring, domain research                |
 
 ---
 
@@ -892,13 +913,13 @@ The platform generates data organically as complaints flow through the pipeline:
 | **Team Name** | CustomerSetu                                                            |
 | **Institute** | _RGIPT (an institution of national importance, along the line of IITs)_ |
 | **Email**     | jhasaket99dbg@gmail.com                                                 |
-| **Hackathon** | iDEA 2.0 — Phase 2 Submission                                           |
+| **Hackathon** | Phase 2 Submission                                                      |
 
 ---
 
 <div align="center">
 
-**Built by Saket jha**
+**Built by Saket Jha**
 
 [![FastAPI](https://img.shields.io/badge/-FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/-LangGraph-FF6B35?style=flat-square)](https://langchain-ai.github.io/langgraph/)
