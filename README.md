@@ -30,17 +30,17 @@ Union Bank of India receives thousands of customer complaints daily across multi
 ## 🎯 Pain Point that customersetu solved for Union Bank of India
 **Endless Recurring Complaints (Reactive Support):** Solved via Root Cause Analysis. Instead of just answering 100 "ATM frozen" tickets, the AI flags the macro-issue to management so the actual ATM can be fixed.
 
-RBI Ombudsman Fines (Regulatory Risk): Solved via a dedicated RBI Compliance Module that actively tracks SLA deadlines and prevents costly regulatory penalties.
+**RBI Ombudsman Fines (Regulatory Risk):** Solved via a dedicated RBI Compliance Module that actively tracks SLA deadlines and prevents costly regulatory penalties.
 
-Generic Ticketing Systems (Misaligned Routing): Solved by hardcoding the AI's routing engine to map exactly to Union Bank of India's real hierarchy (Tier 0 Bot → Tier 1 Branch → Tier 2 Regional → Tier 3 Zonal → Tier 4 Head Office).
+**Generic Ticketing Systems (Misaligned Routing):** Solved by hardcoding the AI's routing engine to map exactly to Union Bank of India's real hierarchy (Tier 0 Bot → Tier 1 Branch → Tier 2 Regional → Tier 3 Zonal → Tier 4 Head Office).
 
-Wasted Historical Data (The "Cold Start" Problem): Solved via Bulk CSV Ingestion. Banks can upload years of old, resolved complaints to instantly train the AI on day one.
+**Wasted Historical Data (The "Cold Start" Problem):** Solved via Bulk CSV Ingestion. Banks can upload years of old, resolved complaints to instantly train the AI on day one.
 
-Hidden Training Flaws (Blind Spots): Solved via Gap Analysis. The system actively scans its own knowledge base and alerts administrators if it lacks training data on a specific topic (like "Net Banking") before customer complaints spike.
+**Hidden Training Flaws (Blind Spots):** Solved via Gap Analysis. The system actively scans its own knowledge base and alerts administrators if it lacks training data on a specific topic (like "Net Banking") before customer complaints spike.
 
-AI Hallucinations (Sending Bad Replies): Solved via Human-in-the-Loop. High-confidence tickets are auto-resolved, but low-confidence or highly sensitive drafts are forced into a queue for human approval before reaching the customer.
+**AI Hallucinations (Sending Bad Replies):** Solved via Human-in-the-Loop. High-confidence tickets are auto-resolved, but low-confidence or highly sensitive drafts are forced into a queue for human approval before reaching the customer.
 
-Data Privacy Breaches: Solved via a dedicated PII Masking Agent that hides sensitive customer information (like account numbers) before the AI processes the text.
+**Data Privacy Breaches:** Solved via a dedicated PII Masking Agent that hides sensitive customer information (like account numbers) before the AI processes the text.
 
 
 ## 🏗️ System Architecture
