@@ -363,30 +363,6 @@ Each entry has:
 | `verified`        | Admin-verified entries only appear in RAG retrieval                            |
 | `embedding`       | 512-dim OpenAI `text-embedding-3-small` vector for semantic search             |
 
-### Admin Endpoints (`/api/v1/admin/kb/`)
-
-| Endpoint                   | What it does                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET /reference`           | Returns all categories, tier labels, scope formats for frontend dropdowns                 |
-| `GET /metrics`             | Dashboard KPIs: total, verified, pending, avg quality, tier distribution, coverage gaps   |
-| `GET /entries`             | Paginated list with filters (tier, category, verified, source, search, sort)              |
-| `GET /entries/{id}`        | Single entry with full `resolution_text`                                                  |
-| `POST /entries`            | Create entry — auto-generates OpenAI embedding                                            |
-| `PUT /entries/{id}`        | Update entry — regenerates embedding only if `resolution_text` changed                    |
-| `DELETE /entries/{id}`     | Delete entry                                                                              |
-| `GET /analytics`           | Top entries by usage, category usage, tier×category coverage matrix, quality distribution |
-| `GET /templates/csv`       | Download CSV import template                                                              |
-| `GET /templates/json`      | Download JSON import template                                                             |
-| `POST /bulk-validate`      | Validate CSV/JSON file without saving (dry-run)                                           |
-| `POST /bulk-import`        | Import CSV/JSON — generates embeddings for each row                                       |
-| `GET /queue`               | List auto-generated KB candidates awaiting admin review                                   |
-| `POST /queue/{id}/approve` | Approve entry (optional field overrides) + insert into KB                                 |
-| `POST /queue/{id}/reject`  | Reject single entry with reason                                                           |
-| `POST /queue/bulk-approve` | Bulk approve entries meeting quality/tier criteria                                        |
-| `POST /queue/bulk-reject`  | Reject all pending entries                                                                |
-| `POST /jobs/process-queue` | Manually trigger auto-approve job (entries ≥ 0.95 quality)                                |
-| `POST /jobs/weekly-review` | Trigger weekly unverified-entry digest                                                    |
-| `POST /jobs/cleanup`       | Clean up old processed queue entries (default 90-day retention)                           |
 
 ### Auto-Enrichment Pipeline
 
