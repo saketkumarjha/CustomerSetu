@@ -27,21 +27,7 @@ Union Bank of India receives thousands of customer complaints daily across multi
 
 **CustomerSetu** solves this with a **Gen-AI powered multi-agent pipeline** that automatically ingests complaints from every channel, detects duplicates via semantic embeddings, classifies by RBI category, generates context-aware resolutions from a live knowledge base, enforces RBI compliance, and auto-escalates from Branch → Zone → Region → Head Office → RBI Ombudsman — all in real time, with full explainability (XAI) and audit trails.
 
----
 
-## 🌐 Live Demo
-
-| Resource          | Link                                                                                                |
-| ----------------- | --------------------------------------------------------------------------------------------------- |
-| 🚀 **Live App**   | --------------------------------------------------------------------------------------------------- |
-| 📹 **Demo Video** | --------------------------------------------------------------------------------------------------- |
-| 📖 **API Docs**   | --------------------------------------------------------------------------------------------------- |
-
-F
-
-> If accessing locally: follow the **How to Run Locally** section below.
-
----
 
 ## 🏗️ System Architecture
 
