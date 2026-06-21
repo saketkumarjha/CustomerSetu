@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_v1_prefix: str = "/api/v1"
     max_file_size_mb: int = 10
+    frontend_base_url: str = "http://localhost:5173"  # Frontend URL for feedback links
 
     # Twilio WhatsApp
     twilio_account_sid: str = ""
@@ -40,8 +41,9 @@ class Settings(BaseSettings):
     twilio_whatsapp_number: str = "whatsapp:+14155238886"
     webhook_base_url: str = ""
 
-    # Frontend base URL — used to construct feedback survey links sent to customers
-    frontend_base_url: str = "http://localhost:5173"
+    # CORS allowed origins — configurable via env var for different deployments
+    # CORS_ALLOWED_ORIGINS: comma-separated list, or "*" to allow all
+    cors_allowed_origins: str = "*"
 
     # Email SMTP (outbound customer reply emails)
     smtp_host: str = "smtp.gmail.com"

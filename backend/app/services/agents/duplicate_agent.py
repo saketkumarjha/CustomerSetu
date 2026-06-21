@@ -158,7 +158,6 @@ def check_for_duplicate(
             ],
         }
 
-    # No duplicate found — return embedding for storage
     reasoning = (
         f"UNIQUE complaint confirmed.\n"
         f"Semantic similarity search across {total_searched} existing complaints.\n"

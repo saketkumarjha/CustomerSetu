@@ -68,9 +68,9 @@ async def _trigger_pipeline_bg(complaint_id: str) -> None:
             "urgency_score": None, "escalation_flag": None, "compliance_category": None,
             "is_rbi_reportable": None, "rbi_supervisor_override": None,
             "severity": None, "severity_score": None, "severity_breakdown": None,
-            "context_documents": None, "draft_response": None, "root_cause": None,
-            "action_steps": None, "confidence_score": None, "authority_sufficient": None,
-            "grounding_score": None, "grounding_warnings": None, "route": None,
+            "context_documents": [], "draft_response": None, "root_cause": None,
+            "action_steps": [], "confidence_score": None, "authority_sufficient": None,
+            "grounding_score": None, "grounding_warnings": [], "route": None,
             "risk_score": None, "sla_hours": None, "rbi_tat_deadline": None,
             "routing_reason": None, "current_tier": _initial_tier, "assigned_tier": None,
             "escalation_decision": None, "explanation_trace": [], "errors": [],
@@ -520,8 +520,8 @@ async def whatsapp_webhook(
 
     _wa_logger.info("[WHATSAPP] Incoming from %s: %s", customer_number, message_text[:80])
 
-    from app.services.whatsapp_service import detect_tier
-    tier = detect_tier(message_text)
+    from app.services.whatsapp_service import detect_tier_smart
+    tier = await detect_tier_smart(message_text)
 
     if tier == 0:
         background_tasks.add_task(_wa_general_query, customer_number, message_text)
@@ -658,8 +658,8 @@ async def email_inbound(
     full_text = f"Subject: {subject}\n\n{body}".strip() if subject else body.strip()
     _email_logger.info("[EMAIL] Incoming from %s: %s", customer_email, full_text[:80])
 
-    from app.services.whatsapp_service import detect_tier
-    tier = detect_tier(full_text)
+    from app.services.whatsapp_service import detect_tier_smart
+    tier = await detect_tier_smart(full_text)
 
     if tier == 0:
         background_tasks.add_task(

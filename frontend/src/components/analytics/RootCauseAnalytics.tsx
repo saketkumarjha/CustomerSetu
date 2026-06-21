@@ -18,7 +18,7 @@ import { useState } from "react";
 const COLORS = ["#ef4444", "#f59e0b", "#eab308", "#84cc16", "#22c55e"];
 
 export function RootCauseAnalytics() {
-  const [minRating, setMinRating] = useState(2);
+  const [minRating, setMinRating] = useState(5);
   const [limit, setLimit] = useState(10);
 
   const {
@@ -31,7 +31,7 @@ export function RootCauseAnalytics() {
     [minRating, limit],
   );
 
-  const hasData = rootCause && rootCause.total_analysed >= 3;
+  const hasData = rootCause && rootCause.total_analysed > 0;
 
   return (
     <div className="space-y-6">
@@ -57,9 +57,11 @@ export function RootCauseAnalytics() {
               onChange={(e) => setMinRating(Number(e.target.value))}
               className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
-              <option value={1}>1 star</option>
-              <option value={2}>2 stars</option>
-              <option value={3}>3 stars</option>
+              <option value={1}>≤ 1 star (critical)</option>
+              <option value={2}>≤ 2 stars (poor)</option>
+              <option value={3}>≤ 3 stars (neutral)</option>
+              <option value={4}>≤ 4 stars</option>
+              <option value={5}>All ratings</option>
             </select>
           </div>
           <div className="flex items-center gap-2">
@@ -100,17 +102,15 @@ export function RootCauseAnalytics() {
       )}
 
       {!loading && !error && rootCause?.message && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
           <div className="flex items-start gap-3">
             <AlertTriangle
               size={20}
-              className="text-amber-600 flex-shrink-0 mt-0.5"
+              className="text-blue-600 flex-shrink-0 mt-0.5"
             />
             <div>
-              <div className="font-semibold text-amber-900 mb-1">
-                Insufficient Data
-              </div>
-              <div className="text-sm text-amber-700">{rootCause.message}</div>
+              <div className="font-semibold text-blue-900 mb-1">Demo Data</div>
+              <div className="text-sm text-blue-700">{rootCause.message}</div>
             </div>
           </div>
         </div>

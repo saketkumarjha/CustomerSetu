@@ -218,7 +218,11 @@ export interface AgentComplaintContext {
   };
   ai_analysis?: {
     classification?: { category?: string; confidence?: number };
-    sentiment?: { emotion?: string; urgency_score?: number; escalation_flag?: boolean };
+    sentiment?: {
+      emotion?: string;
+      urgency_score?: number;
+      escalation_flag?: boolean;
+    };
     severity?: { level?: number; score?: number; breakdown?: unknown };
     rbi_compliance?: {
       compliance_category?: string;
@@ -248,7 +252,11 @@ export interface AgentComplaintContext {
   }>;
   customer_history?: Record<string, unknown>;
   timeline?: Array<{ event: string; timestamp?: string | null }>;
-  agent_decisions_trace?: Array<{ agent?: string; decision?: string; confidence?: number }>;
+  agent_decisions_trace?: Array<{
+    agent?: string;
+    decision?: string;
+    confidence?: number;
+  }>;
   note?: string;
 }
 
@@ -315,7 +323,7 @@ export const api = {
       if (params?.min_rating !== undefined)
         qs.set("min_rating", String(params.min_rating));
       if (params?.limit !== undefined) qs.set("limit", String(params.limit));
-      return apiPost<RootCauseAnalysis>(`/api/v1/dashboard/root-cause?${qs}`);
+      return apiGet<RootCauseAnalysis>(`/api/v1/dashboard/root-cause?${qs}`);
     },
   },
   agent: {
@@ -640,6 +648,13 @@ export interface CSATTrends {
     total_responses: number;
     average_csat: number;
     csat_label: string;
+  };
+  satisfaction_distribution?: {
+    very_dissatisfied: number;
+    dissatisfied: number;
+    neutral: number;
+    satisfied: number;
+    very_satisfied: number;
   };
   by_category?: Array<{
     category: string;

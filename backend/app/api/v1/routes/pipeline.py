@@ -4,12 +4,15 @@ Pipeline execution and SSE streaming routes.
 Two endpoints:
 1. POST /run/{complaint_id}  — trigger pipeline for an existing complaint
 2. GET  /stream/{complaint_id} — SSE stream of agent progress
+3. GET  /debug/logs — tail last 200 lines of application.log (Azure only)
 """
 
 import json
 import logging
 import asyncio
-from fastapi import APIRouter, HTTPException, status, Request, BackgroundTasks, Path
+import os
+import traceback
+from fastapi import APIRouter, HTTPException, status, Request, Path
 from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger(__name__)
@@ -37,13 +40,19 @@ async def run_pipeline(initial_state: PipelineState) -> None:
     - Caches response in idempotency table
     """
     complaint_id = initial_state["complaint_id"]
+    logger.info("[PIPELINE] Starting pipeline for complaint_id=%s", complaint_id)
 
     try:
         await update_complaint_status(complaint_id, "processing")
 
         # Run the LangGraph graph — this executes all nodes in sequence
         # Each node publishes SSE events internally via event_bus
-        final_state = await pipeline_graph.ainvoke(initial_state)
+        logger.info("[PIPELINE] Invoking pipeline_graph for complaint_id=%s", complaint_id)
+        try:
+            final_state = await pipeline_graph.ainvoke(initial_state)
+        except Exception as graph_exc:
+            logger.exception("[PIPELINE] pipeline_graph.ainvoke raised an unhandled exception complaint_id=%s", complaint_id)
+            raise
 
         # Persist all pipeline outputs to complaints table
         await _save_pipeline_outputs(complaint_id, final_state)
@@ -315,7 +324,6 @@ async def _save_pipeline_outputs(complaint_id: str, state: PipelineState) -> Non
 )
 async def trigger_pipeline(
     complaint_id: str = Path(..., pattern=r"^CMP-[0-9A-F]{8}$", description="Complaint ID (format: CMP-XXXXXXXX)"),
-    background_tasks: BackgroundTasks = None,
 ):
     """
     Fetch complaint from Supabase and start the LangGraph pipeline.
@@ -385,14 +393,14 @@ async def trigger_pipeline(
         "severity": None,
         "severity_score": None,
         "severity_breakdown": None,
-        "context_documents": None,
+        "context_documents": [],
         "draft_response": None,
         "root_cause": None,
-        "action_steps": None,
+        "action_steps": [],
         "confidence_score": None,
         "authority_sufficient": None,
         "grounding_score": None,
-        "grounding_warnings": None,
+        "grounding_warnings": [],
         "route": None,
         "risk_score": None,
         "sla_hours": None,
@@ -433,8 +441,22 @@ async def trigger_pipeline(
         "resolution_type":          None,
     }
 
-    # Start pipeline in background — does not block this response
-    background_tasks.add_task(run_pipeline, initial_state)
+    # Start pipeline in background — does not block this response.
+    # Use asyncio.create_task instead of BackgroundTasks so that any
+    # exception that escapes run_pipeline's own try/except is still logged
+    # (BackgroundTasks silently discards unhandled exceptions).
+    task = asyncio.create_task(run_pipeline(initial_state))
+
+    def _log_task_exception(t: asyncio.Task) -> None:
+        exc = t.exception() if not t.cancelled() else None
+        if exc:
+            logger.exception(
+                "[PIPELINE] Background task raised unhandled exception complaint_id=%s",
+                complaint_id,
+                exc_info=exc,
+            )
+
+    task.add_done_callback(_log_task_exception)
 
     return {
         "message": "Pipeline started.",
@@ -500,3 +522,83 @@ async def stream_pipeline(
         }
 
     return EventSourceResponse(event_generator())
+
+
+@router.get(
+    "/debug/logs",
+    summary="Tail last N lines of application.log (Azure debug only)",
+    include_in_schema=False,
+)
+async def debug_logs(lines: int = 200):
+    """
+    Returns the last N lines of the application log file.
+    Checks /home/LogFiles/application.log first, then /tmp/application.log.
+    """
+    for log_path in ("/home/LogFiles/application.log", "/tmp/application.log"):
+        if os.path.exists(log_path):
+            try:
+                with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                    all_lines = f.readlines()
+                tail = all_lines[-lines:]
+                return {
+                    "log_path": log_path,
+                    "total_lines": len(all_lines),
+                    "returned_lines": len(tail),
+                    "content": "".join(tail),
+                }
+            except Exception as e:
+                return {"error": str(e), "traceback": traceback.format_exc()}
+
+    return {
+        "error": "Log file not found in /home/LogFiles or /tmp",
+        "hint": "Trigger a pipeline run first, then check again.",
+        "cwd": os.getcwd(),
+        "tmp_contents": os.listdir("/tmp") if os.path.isdir("/tmp") else "missing",
+        "home_exists": os.path.isdir("/home"),
+        "home_logfiles_exists": os.path.isdir("/home/LogFiles"),
+    }
+
+
+@router.get(
+    "/debug/openai-test",
+    summary="Test OpenAI API connectivity from the container (Azure debug only)",
+    include_in_schema=False,
+)
+async def debug_openai_test():
+    """
+    Makes a minimal GPT-4o call and returns the result or full error.
+    Use this to confirm the OpenAI API key and region are working.
+    """
+    import time
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    key_preview = f"{settings.openai_api_key[:12]}...{settings.openai_api_key[-4:]}"
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=settings.openai_api_key, timeout=30.0, max_retries=0)
+        t0 = time.perf_counter()
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": "Reply with the single word: OK"}],
+            max_tokens=5,
+            temperature=0,
+        )
+        elapsed = round((time.perf_counter() - t0) * 1000)
+        return {
+            "status": "success",
+            "api_key_preview": key_preview,
+            "response": response.choices[0].message.content,
+            "latency_ms": elapsed,
+            "model": response.model,
+        }
+    except Exception as e:
+        logger.error("[DEBUG] OpenAI test failed: %s\n%s", e, traceback.format_exc())
+        return {
+            "status": "failed",
+            "api_key_preview": key_preview,
+            "error_type": type(e).__name__,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }
