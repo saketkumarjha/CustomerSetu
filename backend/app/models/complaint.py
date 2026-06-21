@@ -18,15 +18,12 @@ class ComplaintSubmitResponse(BaseModel):
     Adding new fields here does NOT break existing API consumers
     because we are only adding — never removing or renaming.
     """
-    # Identity
-    complaint_id: str                           # generated UUID, will be used on Day 11
+    complaint_id: str                           
 
-    # Original input
     complaint_text: str
     channel: str
     has_image: bool
 
-    # Image handling outputs (populated only if has_image=True)
     image_url: Optional[str] = None
     extraction_method: Optional[str] = None    # "ocr" or "vision"
     extracted_image_text: Optional[str] = None

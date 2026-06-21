@@ -27,21 +27,21 @@ Union Bank of India receives thousands of customer complaints daily across multi
 
 **CustomerSetu** solves this with a **Gen-AI powered multi-agent pipeline** that automatically ingests complaints from every channel, detects duplicates via semantic embeddings, classifies by RBI category, generates context-aware resolutions from a live knowledge base, enforces RBI compliance, and auto-escalates from Branch → Zone → Region → Head Office → RBI Ombudsman — all in real time, with full explainability (XAI) and audit trails.
 
----
+## 🎯 Pain Point that customersetu solved for Union Bank of India
+**Endless Recurring Complaints (Reactive Support):** Solved via Root Cause Analysis. Instead of just answering 100 "ATM frozen" tickets, the AI flags the macro-issue to management so the actual ATM can be fixed.
 
-## 🌐 Live Demo
+**RBI Ombudsman Fines (Regulatory Risk):** Solved via a dedicated RBI Compliance Module that actively tracks SLA deadlines and prevents costly regulatory penalties.
 
-| Resource          | Link                                                                                                |
-| ----------------- | --------------------------------------------------------------------------------------------------- |
-| 🚀 **Live App**   | --------------------------------------------------------------------------------------------------- |
-| 📹 **Demo Video** | --------------------------------------------------------------------------------------------------- |
-| 📖 **API Docs**   | --------------------------------------------------------------------------------------------------- |
 
-F
 
-> If accessing locally: follow the **How to Run Locally** section below.
+**Wasted Historical Data (The "Cold Start" Problem):** Solved via Bulk CSV Ingestion. Banks can upload years of old, resolved complaints to instantly train the AI on day one.
 
----
+**Hidden Training Flaws (Blind Spots):** Solved via Gap Analysis. The system actively scans its own knowledge base and alerts administrators if it lacks training data on a specific topic (like "Net Banking") before customer complaints spike.
+
+**AI Hallucinations (Sending Bad Replies):** Solved via Human-in-the-Loop. High-confidence tickets are auto-resolved, but low-confidence or highly sensitive drafts are forced into a queue for human approval before reaching the customer.
+
+**Data Privacy Breaches:** Solved via a dedicated PII Masking Agent that hides sensitive customer information (like account numbers) before the AI processes the text.
+
 
 ## 🏗️ System Architecture
 
@@ -363,30 +363,7 @@ Each entry has:
 | `verified`        | Admin-verified entries only appear in RAG retrieval                            |
 | `embedding`       | 512-dim OpenAI `text-embedding-3-small` vector for semantic search             |
 
-### Admin Endpoints (`/api/v1/admin/kb/`)
 
-| Endpoint                   | What it does                                                                              |
-| -------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET /reference`           | Returns all categories, tier labels, scope formats for frontend dropdowns                 |
-| `GET /metrics`             | Dashboard KPIs: total, verified, pending, avg quality, tier distribution, coverage gaps   |
-| `GET /entries`             | Paginated list with filters (tier, category, verified, source, search, sort)              |
-| `GET /entries/{id}`        | Single entry with full `resolution_text`                                                  |
-| `POST /entries`            | Create entry — auto-generates OpenAI embedding                                            |
-| `PUT /entries/{id}`        | Update entry — regenerates embedding only if `resolution_text` changed                    |
-| `DELETE /entries/{id}`     | Delete entry                                                                              |
-| `GET /analytics`           | Top entries by usage, category usage, tier×category coverage matrix, quality distribution |
-| `GET /templates/csv`       | Download CSV import template                                                              |
-| `GET /templates/json`      | Download JSON import template                                                             |
-| `POST /bulk-validate`      | Validate CSV/JSON file without saving (dry-run)                                           |
-| `POST /bulk-import`        | Import CSV/JSON — generates embeddings for each row                                       |
-| `GET /queue`               | List auto-generated KB candidates awaiting admin review                                   |
-| `POST /queue/{id}/approve` | Approve entry (optional field overrides) + insert into KB                                 |
-| `POST /queue/{id}/reject`  | Reject single entry with reason                                                           |
-| `POST /queue/bulk-approve` | Bulk approve entries meeting quality/tier criteria                                        |
-| `POST /queue/bulk-reject`  | Reject all pending entries                                                                |
-| `POST /jobs/process-queue` | Manually trigger auto-approve job (entries ≥ 0.95 quality)                                |
-| `POST /jobs/weekly-review` | Trigger weekly unverified-entry digest                                                    |
-| `POST /jobs/cleanup`       | Clean up old processed queue entries (default 90-day retention)                           |
 
 ### Auto-Enrichment Pipeline
 
