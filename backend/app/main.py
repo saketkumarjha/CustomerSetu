@@ -1,5 +1,8 @@
 import re
 import asyncio
+import logging
+import sys
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +14,42 @@ from app.core.config import get_settings
 from app.api.v1 import api_v1_router
 from app.middleware.auth import verify_api_key
 from app.middleware.rate_limiter import limiter
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+# Azure App Service Docker: stdout goes to ContainerStream (visible in log tail).
+# We also write to /home/LogFiles/application.log which Azure reads via
+# "az webapp log tail" and the Kudu /api/logstream endpoint.
+_log_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+
+# Azure App Service mounts /home as persistent storage.
+# If it's not available, fall back to /tmp (always writable in any container).
+for _log_dir in ("/home/LogFiles", "/tmp"):
+    if os.path.isdir(_log_dir):
+        try:
+            _file_handler = logging.FileHandler(
+                os.path.join(_log_dir, "application.log"),
+                encoding="utf-8",
+            )
+            _log_handlers.append(_file_handler)
+            _log_file_path = os.path.join(_log_dir, "application.log")
+            break
+        except OSError:
+            continue
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=_log_handlers,
+    force=True,
+)
+
+# Promote pipeline-critical loggers to DEBUG so every agent error is visible
+for _ns in ("app.services", "app.api", "app.services.agents", "app.services.supervisor"):
+    logging.getLogger(_ns).setLevel(logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+logger.info("[STARTUP] Logging initialised — stdout + /home/LogFiles/application.log")
+
 settings = get_settings()
 _ROUTE_QUERY_PARAMS: list[tuple[str, re.Pattern, set[str]]] = []
 @asynccontextmanager
@@ -98,16 +137,11 @@ class _AllowHeaderMiddleware:
 
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
+# For demo/internal use: allow all origins. In production, restrict to specific domains.
 app.add_middleware(
     CORSMiddleware,
-    # allow_origins=["*"] is incompatible with allow_credentials=True (CORS spec + Starlette 0.20+).
-    # Explicit origins cover the deployed Static Web App; regex covers localhost dev and
-    # any future *.azurestaticapps.net or *.vercel.app preview URLs.
-    allow_origins=[
-        "https://proud-plant-0e6ce2600.7.azurestaticapps.net",  # production Static Web App
-    ],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?|https://.*\.vercel\.app|https://.*\.azurestaticapps\.net",
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins for demo
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

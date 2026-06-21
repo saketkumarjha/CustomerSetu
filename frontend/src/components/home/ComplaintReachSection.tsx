@@ -30,7 +30,6 @@ type ModalType =
   | "connect"
   | null;
 
-
 const CARDS = [
   {
     id: "complaint" as ModalType,
@@ -191,8 +190,6 @@ const SOCIALS = [
   { label: "YouTube", color: "bg-[#FF0000]" },
 ];
 
-
-
 function ModalShell({
   title,
   onClose,
@@ -248,7 +245,6 @@ function ModalShell({
   );
 }
 
-
 function ComplaintModal({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
@@ -279,7 +275,11 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
       await api.pipeline.run(res.complaint_id);
       setComplaintId(res.complaint_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Submission failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -293,15 +293,24 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
             <CheckCircle size={28} className="text-emerald-500" />
           </div>
           <div>
-            <p className="font-bold text-gray-900 text-base mb-1">Your complaint has been registered</p>
-            <p className="text-sm text-gray-500 mb-3">Our AI pipeline is processing your request now.</p>
+            <p className="font-bold text-gray-900 text-base mb-1">
+              Your complaint has been registered
+            </p>
+            <p className="text-sm text-gray-500 mb-3">
+              Our AI pipeline is processing your request now.
+            </p>
             <div className="inline-flex items-center gap-2 bg-ub-blue-light border border-ub-blue/20 rounded-lg px-4 py-2">
-              <span className="text-xs text-gray-500 font-medium">Complaint ID</span>
-              <span className="font-bold text-ub-blue text-sm tracking-wide">{complaintId}</span>
+              <span className="text-xs text-gray-500 font-medium">
+                Complaint ID
+              </span>
+              <span className="font-bold text-ub-blue text-sm tracking-wide">
+                {complaintId}
+              </span>
             </div>
           </div>
           <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
-            You will receive updates via email. Save your complaint ID for future reference.
+            You will receive updates via email. Save your complaint ID for
+            future reference.
           </p>
           <button
             onClick={onClose}
@@ -370,7 +379,15 @@ function ComplaintModal({ onClose }: { onClose: () => void }) {
             onChange={(e) => setCategory(e.target.value)}
             className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-ub-blue/20 focus:border-ub-blue transition-colors bg-white"
           >
-            {["Account Issue", "Card Issue", "Loan Issue", "Digital Banking", "ATM / Cash Issue", "Service Request", "Other"].map((o) => (
+            {[
+              "Account Issue",
+              "Card Issue",
+              "Loan Issue",
+              "Digital Banking",
+              "ATM / Cash Issue",
+              "Service Request",
+              "Other",
+            ].map((o) => (
               <option key={o}>{o}</option>
             ))}
           </select>
@@ -483,7 +500,11 @@ function UnauthorizedModal({ onClose }: { onClose: () => void }) {
       await api.pipeline.run(res.complaint_id);
       setComplaintId(res.complaint_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Submission failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -501,11 +522,19 @@ function UnauthorizedModal({ onClose }: { onClose: () => void }) {
             <CheckCircle size={28} className="text-ub-red" />
           </div>
           <div>
-            <p className="font-bold text-gray-900 text-base mb-1">Fraud report registered</p>
-            <p className="text-sm text-gray-500 mb-3">Our fraud team has been alerted and will act within 24 hours.</p>
+            <p className="font-bold text-gray-900 text-base mb-1">
+              Fraud report registered
+            </p>
+            <p className="text-sm text-gray-500 mb-3">
+              Our fraud team has been alerted and will act within 24 hours.
+            </p>
             <div className="inline-flex items-center gap-2 bg-red-50 border border-ub-red/20 rounded-lg px-4 py-2">
-              <span className="text-xs text-gray-500 font-medium">Complaint ID</span>
-              <span className="font-bold text-ub-red text-sm tracking-wide">{complaintId}</span>
+              <span className="text-xs text-gray-500 font-medium">
+                Complaint ID
+              </span>
+              <span className="font-bold text-ub-red text-sm tracking-wide">
+                {complaintId}
+              </span>
             </div>
           </div>
           <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
@@ -531,7 +560,10 @@ function UnauthorizedModal({ onClose }: { onClose: () => void }) {
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="bg-red-50 border border-ub-red/20 rounded-lg px-4 py-3 flex items-start gap-2.5">
-          <AlertTriangle size={14} className="text-ub-red mt-0.5 flex-shrink-0" />
+          <AlertTriangle
+            size={14}
+            className="text-ub-red mt-0.5 flex-shrink-0"
+          />
           <p className="text-xs text-ub-red font-medium leading-relaxed">
             Also call our dedicated fraud helpline immediately:{" "}
             <strong>1800 2222 43</strong>
@@ -613,7 +645,14 @@ function UnauthorizedModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => setTransactionType(e.target.value)}
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-ub-red/20 focus:border-ub-red transition-colors bg-white"
             >
-              {["ATM Withdrawal", "UPI Transfer", "Net Banking", "Debit / Credit Card", "NEFT / RTGS", "Other"].map((o) => (
+              {[
+                "ATM Withdrawal",
+                "UPI Transfer",
+                "Net Banking",
+                "Debit / Credit Card",
+                "NEFT / RTGS",
+                "Other",
+              ].map((o) => (
                 <option key={o}>{o}</option>
               ))}
             </select>
@@ -735,7 +774,11 @@ function BranchModal({ onClose }: { onClose: () => void }) {
       await api.pipeline.run(res.complaint_id);
       setComplaintId(res.complaint_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Submission failed. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Submission failed. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -749,15 +792,24 @@ function BranchModal({ onClose }: { onClose: () => void }) {
             <CheckCircle size={28} className="text-emerald-500" />
           </div>
           <div>
-            <p className="font-bold text-gray-900 text-base mb-1">Your branch query has been registered</p>
-            <p className="text-sm text-gray-500 mb-3">Our AI agent has routed it to the relevant branch/zonal team.</p>
+            <p className="font-bold text-gray-900 text-base mb-1">
+              Your branch query has been registered
+            </p>
+            <p className="text-sm text-gray-500 mb-3">
+              Our AI agent has routed it to the relevant branch/zonal team.
+            </p>
             <div className="inline-flex items-center gap-2 bg-ub-blue-light border border-ub-blue/20 rounded-lg px-4 py-2">
-              <span className="text-xs text-gray-500 font-medium">Complaint ID</span>
-              <span className="font-bold text-ub-blue text-sm tracking-wide">{complaintId}</span>
+              <span className="text-xs text-gray-500 font-medium">
+                Complaint ID
+              </span>
+              <span className="font-bold text-ub-blue text-sm tracking-wide">
+                {complaintId}
+              </span>
             </div>
           </div>
           <p className="text-xs text-gray-400 max-w-xs leading-relaxed">
-            You will receive updates via email. Save your complaint ID for future reference.
+            You will receive updates via email. Save your complaint ID for
+            future reference.
           </p>
           <button
             onClick={onClose}
@@ -815,7 +867,8 @@ function BranchModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              Branch Code <span className="text-gray-400 font-normal">(optional)</span>
+              Branch Code{" "}
+              <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <input
               type="text"
@@ -1014,7 +1067,7 @@ function WriteToUsModal({ onClose }: { onClose: () => void }) {
             Dedicated Customer Service Email
           </div>
           <a
-            href="mailto:customercare@unionbankofindia.bank.in"
+            href="mailto:unionbank.complaints.demo@gmail.com"
             className="flex items-center gap-3 p-4 rounded-xl border border-ub-blue/20 bg-ub-blue-light hover:bg-ub-blue hover:text-white transition-all group"
           >
             <div className="w-10 h-10 rounded-lg bg-ub-blue flex items-center justify-center flex-shrink-0 group-hover:bg-white/20">
@@ -1025,7 +1078,7 @@ function WriteToUsModal({ onClose }: { onClose: () => void }) {
                 Email us at
               </div>
               <div className="text-sm font-bold text-ub-blue group-hover:text-white truncate">
-                customercare@unionbankofindia.bank.in
+                unionbank.complaints.demo@gmail.com
               </div>
             </div>
             <ExternalLink
@@ -1122,14 +1175,15 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
   return (
     <ModalShell title="Connect With Us" onClose={onClose}>
       <div className="space-y-6">
-
         {/* ── WhatsApp Sandbox ── */}
         <div className="rounded-2xl border border-[#25D366]/30 bg-[#f0fdf4] overflow-hidden">
           {/* Header */}
           <div className="bg-[#25D366] px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <MessageCircle size={16} className="text-white" />
-              <span className="font-bold text-white text-sm">WhatsApp — Lodge Complaint Instantly</span>
+              <span className="font-bold text-white text-sm">
+                WhatsApp — Lodge Complaint Instantly
+              </span>
             </div>
             <span className="text-[10px] font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">
               LIVE SANDBOX
@@ -1140,29 +1194,48 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
             {/* Left: instructions */}
             <div className="flex-1 space-y-3">
               <p className="text-xs text-gray-600 leading-relaxed">
-                Scan the QR code or send a WhatsApp message to join our AI complaint assistant.
+                Scan the QR code or send a WhatsApp message to join our AI
+                complaint assistant.
               </p>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
                   <Phone size={13} className="text-[#25D366] flex-shrink-0" />
                   <div>
-                    <p className="text-[10px] text-gray-400 font-medium">Step 1 — Send to</p>
-                    <p className="text-sm font-bold text-gray-900">+1 415 523 8886</p>
+                    <p className="text-[10px] text-gray-400 font-medium">
+                      Step 1 — Send to
+                    </p>
+                    <p className="text-sm font-bold text-gray-900">
+                      +1 415 523 8886
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                  <MessageCircle size={13} className="text-[#25D366] flex-shrink-0" />
+                  <MessageCircle
+                    size={13}
+                    className="text-[#25D366] flex-shrink-0"
+                  />
                   <div>
-                    <p className="text-[10px] text-gray-400 font-medium">Step 2 — Message</p>
-                    <p className="text-sm font-bold text-gray-900 font-mono">join sand-hospital</p>
+                    <p className="text-[10px] text-gray-400 font-medium">
+                      Step 2 — Message
+                    </p>
+                    <p className="text-sm font-bold text-gray-900 font-mono">
+                      join sand-hospital
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                  <CheckCircle size={13} className="text-[#25D366] flex-shrink-0" />
+                  <CheckCircle
+                    size={13}
+                    className="text-[#25D366] flex-shrink-0"
+                  />
                   <div>
-                    <p className="text-[10px] text-gray-400 font-medium">Step 3</p>
-                    <p className="text-xs text-gray-700">Type your complaint — AI handles the rest</p>
+                    <p className="text-[10px] text-gray-400 font-medium">
+                      Step 3
+                    </p>
+                    <p className="text-xs text-gray-700">
+                      Type your complaint — AI handles the rest
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1180,9 +1253,17 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
 
               {/* Evaluator note */}
               <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <AlertTriangle size={12} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                <AlertTriangle
+                  size={12}
+                  className="text-amber-500 flex-shrink-0 mt-0.5"
+                />
                 <p className="text-[10px] text-amber-700 leading-relaxed">
-                  <strong>Note for evaluators:</strong> This is a Twilio WhatsApp Sandbox. The sandbox join code (<span className="font-mono">join sand-hospital</span>) is valid for approximately <strong>1 month</strong> from deployment. After expiry, a new sandbox session must be initiated from the Twilio console.
+                  <strong>Note for evaluators:</strong> This is a Twilio
+                  WhatsApp Sandbox. The sandbox join code (
+                  <span className="font-mono">join sand-hospital</span>) is
+                  valid for approximately <strong>1 month</strong> from
+                  deployment. After expiry, a new sandbox session must be
+                  initiated from the Twilio console.
                 </p>
               </div>
             </div>
@@ -1194,7 +1275,9 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
                 alt="WhatsApp Sandbox QR Code"
                 className="w-36 h-36 rounded-xl border border-gray-200 shadow-sm object-contain bg-white p-1"
               />
-              <p className="text-[10px] text-gray-400 font-medium text-center">Scan on mobile</p>
+              <p className="text-[10px] text-gray-400 font-medium text-center">
+                Scan on mobile
+              </p>
             </div>
           </div>
         </div>
@@ -1202,7 +1285,9 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
         {/* ── Divider ── */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-gray-200" />
-          <span className="text-xs text-gray-400 font-medium">Social Media</span>
+          <span className="text-xs text-gray-400 font-medium">
+            Social Media
+          </span>
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
@@ -1225,12 +1310,10 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
             </a>
           ))}
         </div>
-
       </div>
     </ModalShell>
   );
 }
-
 
 function SupportCard({
   card,
@@ -1302,7 +1385,6 @@ function SupportCard({
     </button>
   );
 }
-
 
 export default function ComplaintReachSection() {
   const [modal, setModal] = useState<ModalType>(null);

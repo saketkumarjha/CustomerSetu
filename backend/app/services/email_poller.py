@@ -138,10 +138,10 @@ def _imap_fetch_unseen(mail: imaplib.IMAP4_SSL) -> list[dict]:
 async def _dispatch(sender: str, subject: str, body: str) -> None:
     """Route a single parsed email through the appropriate channel handler."""
     from app.api.v1.routes.channels import _email_general_query, _email_branch_query
-    from app.services.whatsapp_service import detect_tier
+    from app.services.whatsapp_service import detect_tier_smart
 
     full_text = f"Subject: {subject}\n\n{body}".strip() if subject else body.strip()
-    tier = detect_tier(full_text)
+    tier = await detect_tier_smart(full_text)
 
     logger.info(
         "[IMAP] Dispatching from=%s subject=%r tier=%d",

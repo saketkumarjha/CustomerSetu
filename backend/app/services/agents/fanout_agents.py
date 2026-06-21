@@ -8,56 +8,75 @@ Agents:
 4. Severity Agent      — rule-based score + severity level 1-5
 
 All 4 run via asyncio.gather() — total latency = max(individual) not sum.
-Typical: 3-5s parallel vs 12-20s serial.
-
-Each agent returns standardised AgentOutput with full XAI reasoning.
-GPT-4o structured output (response_format=json_object) ensures
-parseable responses without markdown fences.
+Uses AsyncOpenAI (not asyncio.to_thread) to avoid Azure SNAT port exhaustion
+when 4 simultaneous outbound HTTPS connections are made from thread pool.
 """
 
 import asyncio
 import json
+import logging
+import threading
 import time
-from openai import OpenAI
+import traceback
+from openai import AsyncOpenAI
 from app.core.config import get_settings
 from app.models.agent_output import AgentOutput, AgentStatus
 
-# Module-level singleton
-_client: OpenAI | None = None
+logger = logging.getLogger(__name__)
+
+# Async client singleton with a lock to prevent duplicate creation on first call.
+_async_client: AsyncOpenAI | None = None
+_client_lock = threading.Lock()
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        settings = get_settings()
-        _client = OpenAI(
-            api_key=settings.openai_api_key,
-            timeout=60.0,    # 60s total — GPT-4o fan-out agents are parallel, keep generous
-            max_retries=1,   # one automatic retry on transient 5xx, then fail fast
+def _get_async_client() -> AsyncOpenAI:
+    global _async_client
+    if _async_client is not None:
+        return _async_client
+    with _client_lock:
+        if _async_client is None:
+            settings = get_settings()
+            logger.info("[FANOUT] Creating AsyncOpenAI client (api_key prefix: %s...)", settings.openai_api_key[:12])
+            _async_client = AsyncOpenAI(
+                api_key=settings.openai_api_key,
+                timeout=60.0,
+                max_retries=1,
+            )
+    return _async_client
+
+
+def _reset_client() -> None:
+    """Force a new client on the next call — used after auth/connection errors."""
+    global _async_client
+    with _client_lock:
+        _async_client = None
+
+
+async def _call_gpt4o(system_prompt: str, user_prompt: str, max_tokens: int = 400) -> dict:
+    """
+    Async GPT-4o call using AsyncOpenAI — runs directly on the event loop,
+    no thread pool. This avoids Azure SNAT port exhaustion that occurs when
+    asyncio.to_thread spawns 4 simultaneous threads each opening a new
+    HTTPS connection.
+    """
+    client = _get_async_client()
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            max_tokens=max_tokens,
         )
-    return _client
-
-
-def _call_gpt4o(system_prompt: str, user_prompt: str, max_tokens: int = 400) -> dict:
-    """
-    Synchronous GPT-4o call with JSON output enforced.
-    Wrapped with asyncio.to_thread() in all async agent functions.
-
-    Using response_format=json_object eliminates need for regex JSON extraction.
-    Temperature=0.1 for consistent, deterministic outputs.
-    """
-    client = _get_client()
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.1,
-        max_tokens=max_tokens,
-    )
-    return json.loads(response.choices[0].message.content)
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        _reset_client()
+        logger.error("[FANOUT] GPT-4o call failed — %s: %s\n%s",
+                     type(e).__name__, e, traceback.format_exc())
+        raise
 
 
 # ── AGENT 1: Classification Agent ────────────────────────────────────────────
@@ -79,7 +98,9 @@ You must respond ONLY with a valid JSON object in this exact format:
 Valid categories:
 - Credit Card
 - Debit Card  
-- UPI / IMPS / NEFT
+- UPI 
+-IMPS
+-NEFT 
 - Savings Account
 - Current Account
 - Home Loan
@@ -94,21 +115,12 @@ Valid categories:
 - General Banking"""
 
 
-def _classify_sync(masked_text: str) -> dict:
-    user_prompt = f"""Classify this customer complaint:
-
-COMPLAINT: {masked_text}
-
-Remember: respond ONLY with the JSON object."""
-    return _call_gpt4o(CLASSIFICATION_SYSTEM, user_prompt, max_tokens=300)
-
-
 async def run_classification_agent(masked_text: str) -> AgentOutput:
     """Classification Agent — identifies complaint category and product."""
     start = time.perf_counter()
-
+    user_prompt = f"Classify this customer complaint:\n\nCOMPLAINT: {masked_text}\n\nRemember: respond ONLY with the JSON object."
     try:
-        result = await asyncio.to_thread(_classify_sync, masked_text)
+        result = await _call_gpt4o(CLASSIFICATION_SYSTEM, user_prompt, max_tokens=300)
 
         category = result.get("category", "General Banking")
         product = result.get("product", "Unknown")
@@ -144,6 +156,8 @@ async def run_classification_agent(masked_text: str) -> AgentOutput:
         )
 
     except Exception as e:
+        logger.error("[FANOUT][Classification] failed — %s: %s\n%s",
+                     type(e).__name__, e, traceback.format_exc())
         return AgentOutput(
             agent_name="Classification Agent",
             agent_order=3,
@@ -184,21 +198,12 @@ Escalation triggers: legal threats, mentions of RBI/consumer court,
 financial loss > ₹10000, repeat complaint, media threats."""
 
 
-def _sentiment_sync(masked_text: str) -> dict:
-    user_prompt = f"""Analyze the emotion and urgency in this banking complaint:
-
-COMPLAINT: {masked_text}
-
-Respond ONLY with the JSON object."""
-    return _call_gpt4o(SENTIMENT_SYSTEM, user_prompt, max_tokens=300)
-
-
 async def run_sentiment_agent(masked_text: str) -> AgentOutput:
     """Sentiment Agent — emotion detection, urgency score, escalation flag."""
     start = time.perf_counter()
-
+    user_prompt = f"Analyze the emotion and urgency in this banking complaint:\n\nCOMPLAINT: {masked_text}\n\nRespond ONLY with the JSON object."
     try:
-        result = await asyncio.to_thread(_sentiment_sync, masked_text)
+        result = await _call_gpt4o(SENTIMENT_SYSTEM, user_prompt, max_tokens=300)
 
         emotion = result.get("emotion", "Neutral")
         urgency = int(result.get("urgency_score", 5))
@@ -236,6 +241,8 @@ async def run_sentiment_agent(masked_text: str) -> AgentOutput:
         )
 
     except Exception as e:
+        logger.error("[FANOUT][Sentiment] failed — %s: %s\n%s",
+                     type(e).__name__, e, traceback.format_exc())
         return AgentOutput(
             agent_name="Sentiment Agent",
             agent_order=4,
@@ -291,21 +298,12 @@ supervisor_override rules:
 - All others → null (normal routing applies)"""
 
 
-def _compliance_sync(masked_text: str) -> dict:
-    user_prompt = f"""Analyze this banking complaint for RBI compliance:
-
-COMPLAINT: {masked_text}
-
-Respond ONLY with the JSON object."""
-    return _call_gpt4o(COMPLIANCE_SYSTEM, user_prompt, max_tokens=400)
-
-
 async def run_compliance_agent(masked_text: str) -> AgentOutput:
     """Compliance Agent — RBI category detection + supervisor override rules."""
     start = time.perf_counter()
-
+    user_prompt = f"Analyze this banking complaint for RBI compliance:\n\nCOMPLAINT: {masked_text}\n\nRespond ONLY with the JSON object."
     try:
-        result = await asyncio.to_thread(_compliance_sync, masked_text)
+        result = await _call_gpt4o(COMPLIANCE_SYSTEM, user_prompt, max_tokens=400)
 
         rbi_category = result.get("rbi_category", "NOT_APPLICABLE")
         is_reportable = bool(result.get("is_rbi_reportable", False))
@@ -351,6 +349,8 @@ async def run_compliance_agent(masked_text: str) -> AgentOutput:
         )
 
     except Exception as e:
+        logger.error("[FANOUT][Compliance] failed — %s: %s\n%s",
+                     type(e).__name__, e, traceback.format_exc())
         return AgentOutput(
             agent_name="Compliance Agent",
             agent_order=5,
@@ -403,21 +403,12 @@ Scoring rules:
 Max raw score = 10. Map to 1-5 scale."""
 
 
-def _severity_sync(masked_text: str) -> dict:
-    user_prompt = f"""Assess the severity of this banking complaint:
-
-COMPLAINT: {masked_text}
-
-Respond ONLY with the JSON object."""
-    return _call_gpt4o(SEVERITY_SYSTEM, user_prompt, max_tokens=300)
-
-
 async def run_severity_agent(masked_text: str) -> AgentOutput:
     """Severity Agent — rule-based scoring + GPT-4o validation."""
     start = time.perf_counter()
-
+    user_prompt = f"Assess the severity of this banking complaint:\n\nCOMPLAINT: {masked_text}\n\nRespond ONLY with the JSON object."
     try:
-        result = await asyncio.to_thread(_severity_sync, masked_text)
+        result = await _call_gpt4o(SEVERITY_SYSTEM, user_prompt, max_tokens=300)
 
         severity = int(result.get("severity_level", 3))
         severity = max(1, min(5, severity))  # clamp to 1-5
@@ -467,6 +458,8 @@ async def run_severity_agent(masked_text: str) -> AgentOutput:
         )
 
     except Exception as e:
+        logger.error("[FANOUT][Severity] failed — %s: %s\n%s",
+                     type(e).__name__, e, traceback.format_exc())
         return AgentOutput(
             agent_name="Severity Agent",
             agent_order=6,

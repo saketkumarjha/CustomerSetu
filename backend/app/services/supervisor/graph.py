@@ -18,6 +18,7 @@ never changes, only the node internals.
 import asyncio
 import logging
 import time
+import traceback
 from typing import Literal
 from langgraph.graph import StateGraph, END
 
@@ -143,8 +144,8 @@ async def pii_node(state: PipelineState) -> dict:
 
     except Exception as e:
         # PII failure is non-fatal — pass text through unmasked but log the error.
-        # Reason: it is better to process an unmasked complaint with a warning
-        # than to block the entire pipeline. The agent's error is visible in XAI.
+        logger.error("[PIPELINE][PII] failed (complaint_id=%s) — %s: %s\n%s",
+                     complaint_id, type(e).__name__, e, traceback.format_exc())
         masked_text = state["merged_text"]
         language = "en"
         pii_entities = []
@@ -236,6 +237,8 @@ async def duplicate_node(state: PipelineState) -> dict:
 
     except Exception as e:
         # If embedding/search fails, treat as unique and continue
+        logger.error("[PIPELINE][Duplicate] failed (complaint_id=%s) — %s: %s\n%s",
+                     complaint_id, type(e).__name__, e, traceback.format_exc())
         # Better to process a potential duplicate than block real complaints
         is_duplicate = False
         duplicate_of = None
@@ -311,6 +314,22 @@ async def parallel_fanout_node(state: PipelineState) -> dict:
     sentiment = results["sentiment"]
     compliance = results["compliance"]
     severity = results["severity"]
+
+    # Log ALL agent outcomes — success and failure — so we can see exactly
+    # what happened in the Azure log stream
+    for output in [classification, sentiment, compliance, severity]:
+        if output.error_message:
+            logger.error(
+                "[PIPELINE] %s FAILED (complaint_id=%s): %s",
+                output.agent_name, complaint_id, output.error_message
+            )
+        else:
+            logger.info(
+                "[PIPELINE] %s OK (complaint_id=%s) confidence=%.2f decision=%s",
+                output.agent_name, complaint_id,
+                output.confidence or 0.0,
+                (output.decision or "")[:80],
+            )
 
     # Write all 4 to audit trail and emit completion events
     for output in [classification, sentiment, compliance, severity]:
@@ -409,6 +428,8 @@ async def rag_node(state: PipelineState) -> dict:
         )
 
     except Exception as e:
+        logger.error("[PIPELINE][RAG] failed (complaint_id=%s) — %s: %s\n%s",
+                     complaint_id, type(e).__name__, e, traceback.format_exc())
         documents = []
         output = AgentOutput(
             agent_name=agent_name,
@@ -507,6 +528,8 @@ async def resolution_node(state: PipelineState) -> dict:
         )
 
     except Exception as e:
+        logger.error("[PIPELINE][Resolution] failed (complaint_id=%s) — %s: %s\n%s",
+                     complaint_id, type(e).__name__, e, traceback.format_exc())
         draft = (
             "We have received your complaint and our team is reviewing it. "
             "A representative will contact you within 24 hours."
@@ -601,6 +624,8 @@ async def grounding_node(state: PipelineState) -> dict:
 
     except Exception as e:
         # Grounding failure — flag for human review conservatively
+        logger.error("[PIPELINE][Grounding] failed (complaint_id=%s) — %s: %s\n%s",
+                     complaint_id, type(e).__name__, e, traceback.format_exc())
         grounding_score = 0.5
         warnings = [{
             "type": "SYSTEM_ERROR",

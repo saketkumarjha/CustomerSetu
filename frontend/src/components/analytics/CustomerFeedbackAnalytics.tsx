@@ -44,21 +44,30 @@ export function CustomerFeedbackAnalytics() {
   const { data: csat } = useApiData(() => api.dashboard.csatTrends(30), []);
 
   const hasData = csat && csat.overall && csat.overall.total_responses > 0;
+  // Keep all 4 weeks; replace null avg_csat with 0 so the chart always shows a full trend line
   const weeklyTrend =
     hasData && csat.weekly_trend
-      ? csat.weekly_trend.filter((w) => w.avg_csat !== null)
+      ? csat.weekly_trend.map((w) => ({ ...w, avg_csat: w.avg_csat ?? 0 }))
       : DUMMY_WEEKLY_TREND;
   const byCategory =
     hasData && csat.by_category ? csat.by_category : DUMMY_BY_CATEGORY;
   const byChannel =
     hasData && csat.by_channel ? csat.by_channel : DUMMY_BY_CHANNEL;
 
-  // Build stable distribution from real data or static dummy — no Math.random()
+  // Build distribution from real backend data when available
   const distribution: Record<number, number> = useMemo(() => {
-    if (!hasData) return DUMMY_DISTRIBUTION;
-    // If backend adds per-rating breakdown later, replace here.
+    const sd = csat?.satisfaction_distribution;
+    if (hasData && sd) {
+      return {
+        5: sd.very_satisfied,
+        4: sd.satisfied,
+        3: sd.neutral,
+        2: sd.dissatisfied,
+        1: sd.very_dissatisfied,
+      };
+    }
     return DUMMY_DISTRIBUTION;
-  }, [hasData]);
+  }, [hasData, csat]);
 
   return (
     <div className="space-y-6">

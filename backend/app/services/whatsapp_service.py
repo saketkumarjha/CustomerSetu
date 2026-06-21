@@ -5,6 +5,7 @@ This module lives inside the backend package so it can be imported
 by both channels.py (webhook) and agent_action_service.py (reply on action).
 """
 
+import asyncio
 import uuid
 import logging
 
@@ -194,10 +195,21 @@ def detect_tier(text: str) -> int:
         "account blocked", "account frozen", "account suspended",
         "account closed without", "account deactivated", "account inactive",
         "account hold", "lien marked", "lien on account",
-        # Card issues
+        # Card / ATM issues — explicit blocks and failures
         "card blocked", "card not received", "card not working",
         "card swallowed", "atm swallowed", "cash not dispensed",
         "atm cash not", "atm did not dispense", "cash not came out",
+        # ATM card / debit card blocked (any phrasing)
+        "atm blocked", "atm is blocked", "atm card blocked",
+        "debit card blocked", "card is blocked", "card got blocked",
+        "card has been blocked", "card locked",
+        # PIN-related service failures
+        "atm pin", "pin blocked", "pin is blocked", "pin locked",
+        "pin not working", "pin incorrect", "wrong pin", "incorrect pin",
+        "forgot pin", "forgot my pin", "forgot atm pin", "forgot card pin",
+        "pin forgotten", "lost my pin", "pin reset", "pin generation",
+        "pin not generated", "pin attempts", "multiple pin attempts",
+        "three wrong", "3 wrong", "three attempts", "3 attempts",
         # Cheque
         "cheque bounced", "cheque dishonoured", "cheque returned",
         "cheque not cleared", "clearing failed", "cheque pending",
@@ -291,6 +303,14 @@ def detect_tier(text: str) -> int:
     ]):
         return 1
 
+    # ── Tier 1 — Regex catch-all: card/ATM/PIN service issues ────────────────
+    # Keyword lists always have gaps. This catches "ATM is blocked", "my PIN is
+    # wrong", "forgot my card PIN" and similar natural language variants that
+    # don't match any exact keyword above.
+    if re.search(r"\b(atm|card|pin|debit)\b.{0,40}\b(block|lock|wrong|forgot|fail|invalid|not\s+work|attempt)", t) \
+       or re.search(r"\b(block|lock|forgot)\b.{0,40}\b(atm|card|pin|debit)\b", t):
+        return 1
+
     # ── Tier 1 — Fraud / security concerns ───────────────────────────────────
     if any(kw in t for kw in [
         "my account was hacked", "account hacked", "account compromised",
@@ -305,6 +325,58 @@ def detect_tier(text: str) -> int:
         return 1
 
     return 0
+
+
+async def detect_tier_smart(text: str) -> int:
+    """
+    Two-phase tier detection — used by all inbound channel handlers.
+
+    Phase 1 — Keyword matching (microseconds):
+        Fast rule-based check. If it fires Tier 1+, trust it immediately.
+
+    Phase 2 — LLM safety net (only when keywords say Tier 0):
+        Keyword lists are finite; natural language is infinite.
+        GPT-4o classifies the text. If it identifies a banking product
+        complaint (anything except "General Banking"), keywords missed it —
+        upgrade to Tier 1 and run the full pipeline.
+
+    Fail-safe: if LLM call fails for any reason, return Tier 1 (pipeline)
+    rather than silently auto-closing a potentially real complaint.
+
+    Examples of what keywords miss that LLM catches:
+      "I cleared my education loan but still getting payment messages" → Tier 1
+      "Why was money deducted from my account yesterday?" → Tier 1
+      "My net banking dashboard shows wrong balance" → Tier 1
+    """
+    tier = detect_tier(text)
+    if tier != 0:
+        return tier  # Keywords caught a complaint — no need for LLM
+
+    # Keywords said Tier 0 — verify with LLM before auto-closing
+    try:
+        from app.services.agents.fanout_agents import _classify_sync
+        result = await asyncio.to_thread(_classify_sync, text)
+        category   = result.get("category", "General Banking")
+        confidence = float(result.get("confidence") or 0.5)
+
+        # Anything the LLM classifies outside "General Banking" is a complaint
+        # that the keyword list missed — run the full pipeline.
+        if category != "General Banking" and confidence >= 0.5:
+            logger.info(
+                "[TIER] LLM override: keywords=Tier0 → Tier1 | category=%s | confidence=%.0f%%",
+                category, confidence * 100,
+            )
+            return 1
+
+    except Exception as exc:
+        # Fail safe: on any LLM error, run the pipeline rather than
+        # silently discarding what might be a real complaint.
+        logger.warning(
+            "[TIER] LLM check failed (%s) — defaulting to Tier 1 (pipeline) for safety", exc
+        )
+        return 1
+
+    return 0  # LLM confirms: genuinely a general inquiry → RAG auto-reply
 
 
 # ── Instant RAG reply (Tier 0) ────────────────────────────────────────────────

@@ -548,6 +548,542 @@ SEED_DATA = [
             "arrangement. We apologize for the distress caused by this process."
         ),
     },
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # COVERAGE GAP FILL — additional entries to reach ≥3 per category
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── ATM (gap fill — 3rd entry) ────────────────────────────────────────────
+    {
+        "category": "ATM",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "ATM Card Swallowed",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding your debit card "
+            "being retained by the ATM. This typically occurs when the card is not "
+            "retrieved within the stipulated time or due to a card reader malfunction. "
+            "We have raised a retrieval request with the ATM custodian. If the card "
+            "cannot be retrieved safely, a replacement card will be dispatched to "
+            "your registered address within 5 working days at no charge. Your "
+            "existing card has been hotlisted to prevent misuse. We apologize for "
+            "the inconvenience."
+        ),
+    },
+
+    # ── Debit Card (gap fill — 3rd entry) ────────────────────────────────────
+    {
+        "category": "Debit Card",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "International Transaction Declined",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the decline of "
+            "your debit card for international transactions. As per RBI guidelines, "
+            "international usage on debit cards is disabled by default for security. "
+            "You can enable international transactions via our mobile banking app "
+            "under Card Controls, or by visiting your nearest branch. The feature "
+            "can be activated for a specific duration and geography. We apologize "
+            "for the inconvenience caused during your travel."
+        ),
+    },
+
+    # ── Credit Card (gap fill — 3rd entry) ───────────────────────────────────
+    {
+        "category": "Credit Card",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Reward Points Not Credited",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding non-credit of "
+            "reward points on your credit card transactions. After investigation, "
+            "we confirm the points for transactions dated [DATE] were not processed "
+            "due to a system reconciliation delay. The pending reward points of "
+            "[POINTS] have been credited to your account with immediate effect. "
+            "Your updated reward balance is now visible on the mobile app and "
+            "internet banking portal. We apologize for the delay."
+        ),
+    },
+
+    # ── Home Loan (gap fill — 3rd entry) ─────────────────────────────────────
+    {
+        "category": "Home Loan",
+        "tier_level": 3,
+        "quality_score": 0.95,
+        "issue_type": "NOC Not Issued After Closure",
+        "resolution_text": (
+            "Dear Customer, we sincerely apologize for the delay in issuing your "
+            "No Objection Certificate (NOC) after home loan closure. As per RBI "
+            "Responsible Lending Conduct Directions 2023, the NOC and original "
+            "property documents must be returned within 30 days of final repayment. "
+            "Your NOC has been prepared and will be dispatched via registered post "
+            "within 3 working days. The original title deeds will follow separately "
+            "under insured courier. We have also updated CERSAI records to release "
+            "the charge on your property. We regret the delay."
+        ),
+    },
+
+    # ── Business Loan (gap fill — 3rd entry) ─────────────────────────────────
+    {
+        "category": "Business Loan",
+        "tier_level": 3,
+        "quality_score": 0.95,
+        "issue_type": "Collateral Release Delayed",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the delay in "
+            "release of collateral securities post business loan closure. As per "
+            "RBI guidelines, collateral must be released within 30 days of full "
+            "repayment. We have escalated this to our Regional Credit Operations "
+            "team. Your collateral documents including the original property papers "
+            "and hypothecation release letter will be handed over at your home "
+            "branch within 7 working days. We apologize for the delay and the "
+            "inconvenience caused to your business operations."
+        ),
+    },
+
+    # ── Savings Account (gap fill — 3rd entry) ───────────────────────────────
+    {
+        "category": "Savings Account",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Account Frozen Without Notice",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the freezing "
+            "of your savings account without prior notice. As per RBI KYC Master "
+            "Direction 2016, customers must be notified before any account "
+            "restrictions are imposed. We apologize for not following this "
+            "procedure. After reviewing your account, we confirm the freeze was "
+            "applied in error. Your account has been unfrozen with immediate "
+            "effect and is fully operational. We have also waived any charges "
+            "incurred due to the erroneous freeze. We regret the inconvenience."
+        ),
+    },
+
+    # ── Current Account (gap fill — 2nd and 3rd entries) ─────────────────────
+    {
+        "category": "Current Account",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Cheque Book Not Delivered",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding non-delivery "
+            "of your current account cheque book. Our records confirm the cheque "
+            "book was dispatched on [DATE] via speed post. We have raised a "
+            "complaint with the postal department and simultaneously issued a "
+            "fresh cheque book which will be delivered to your registered address "
+            "within 5 working days. The previous cheque book series has been "
+            "cancelled to prevent misuse. We apologize for the inconvenience "
+            "caused to your business operations."
+        ),
+    },
+    {
+        "category": "Current Account",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Overdraft Limit Reduced Without Notice",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the reduction "
+            "of your current account overdraft limit without prior intimation. "
+            "As per RBI Fair Practices Code, any reduction in sanctioned limits "
+            "must be communicated in advance. We have reviewed your account and "
+            "confirm the limit was reduced due to an automated credit review. "
+            "Your overdraft limit has been restored to the original sanctioned "
+            "amount pending a formal review. Our relationship manager will contact "
+            "you within 48 hours to discuss the renewal. We apologize for the "
+            "disruption to your business."
+        ),
+    },
+
+    # ── Internet Banking (gap fill — 3rd entry) ───────────────────────────────
+    {
+        "category": "Internet Banking",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "OTP Not Received",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding non-receipt "
+            "of OTP for internet banking transactions. This may occur due to "
+            "network congestion or your mobile number not being updated in our "
+            "records. We have verified your registered mobile number and confirmed "
+            "it is correct. Our technical team has refreshed the OTP delivery "
+            "service for your account. Please retry after 15 minutes. If the "
+            "issue persists, you may use our TOTP-based authenticator app as an "
+            "alternative. We apologize for the inconvenience."
+        ),
+    },
+
+    # ── UPI (3rd entry — higher tier scenario) ────────────────────────────────
+    {
+        "category": "UPI",
+        "tier_level": 3,
+        "quality_score": 0.95,
+        "issue_type": "UPI Fraud — Phishing",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding a fraudulent "
+            "UPI transaction initiated through a phishing link. This matter has "
+            "been escalated to our Regional Fraud Management team. Your UPI ID "
+            "has been suspended to prevent further misuse. As per RBI guidelines "
+            "on limiting liability for third-party fraud, a provisional credit "
+            "will be applied within 10 working days subject to investigation. "
+            "Please file a cybercrime complaint at cybercrime.gov.in and share "
+            "the reference number with us. Do not share OTP or UPI PIN with "
+            "anyone. We will contact you within 24 hours."
+        ),
+    },
+
+    # ── Personal Loan (3rd entry — higher tier) ───────────────────────────────
+    {
+        "category": "Personal Loan",
+        "tier_level": 3,
+        "quality_score": 0.95,
+        "issue_type": "Recovery Agent Harassment",
+        "resolution_text": (
+            "Dear Customer, we take your complaint regarding recovery agent "
+            "harassment with utmost seriousness. As per RBI guidelines on Fair "
+            "Practices Code for Lenders, recovery agents are strictly prohibited "
+            "from contacting borrowers before 8 AM or after 7 PM, using abusive "
+            "language, or contacting family members. We have immediately suspended "
+            "the concerned recovery agent pending investigation. A formal complaint "
+            "has been filed with our compliance team. This matter has been escalated "
+            "to our Regional Nodal Officer. We will contact you within 24 hours "
+            "with a resolution. We sincerely apologize for this unacceptable conduct."
+        ),
+    },
+
+    # ── Forex ─────────────────────────────────────────────────────────────────
+    {
+        "category": "Forex",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Wrong Exchange Rate Applied",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the incorrect "
+            "exchange rate applied to your foreign currency transaction. After "
+            "reviewing the transaction dated [DATE], we confirm the rate applied "
+            "deviated from the card rate published on our website at the time of "
+            "transaction. The difference of Rs [AMOUNT] has been credited to your "
+            "account. Going forward, you can check the live forex rates on our "
+            "website or mobile app before initiating international transactions. "
+            "We apologize for the discrepancy."
+        ),
+    },
+    {
+        "category": "Forex",
+        "tier_level": 2,
+        "quality_score": 0.90,
+        "issue_type": "Forex Card Not Loaded",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the delay in "
+            "loading your forex travel card. The loading request placed on [DATE] "
+            "was held due to a pending FEMA compliance check. The check has been "
+            "completed and your card has been loaded with the requested amount of "
+            "[CURRENCY] [AMOUNT]. The card is now active and ready for use. "
+            "Please check the balance via our mobile app or at any ATM abroad. "
+            "We apologize for the delay and the inconvenience caused to your "
+            "travel plans."
+        ),
+    },
+
+    # ── Investment / Mutual Fund ──────────────────────────────────────────────
+    {
+        "category": "Investment / Mutual Fund",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "SIP Not Executed",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the non-execution "
+            "of your SIP instalment for [MONTH]. After investigation, we confirm "
+            "the SIP debit failed due to insufficient balance in your linked savings "
+            "account on the due date. As per SEBI guidelines, missed SIP instalments "
+            "cannot be backdated. We recommend maintaining a minimum balance of "
+            "1.5x your SIP amount on the debit date to avoid future failures. "
+            "Your SIP mandate remains active and will execute on the next due date. "
+            "We apologize for the inconvenience."
+        ),
+    },
+    {
+        "category": "Investment / Mutual Fund",
+        "tier_level": 2,
+        "quality_score": 0.90,
+        "issue_type": "Redemption Amount Not Credited",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the delay in "
+            "credit of mutual fund redemption proceeds. As per SEBI regulations, "
+            "redemption proceeds for equity funds must be credited within T+3 "
+            "working days and for debt funds within T+2 working days. We have "
+            "traced your redemption request and confirm the proceeds of Rs [AMOUNT] "
+            "were delayed due to a bank account validation mismatch. The amount "
+            "has been credited to your registered bank account. We apologize for "
+            "the delay."
+        ),
+    },
+
+    # ── Vehicle Loan ──────────────────────────────────────────────────────────
+    {
+        "category": "Vehicle Loan",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "RC Book Hypothecation Not Removed",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the delay in "
+            "removal of hypothecation from your vehicle RC book after loan closure. "
+            "As per RBI Responsible Lending Conduct Directions 2023, the NOC for "
+            "hypothecation removal must be issued within 30 days of final repayment. "
+            "Your NOC has been prepared and will be dispatched within 3 working days. "
+            "You may submit this NOC to your Regional Transport Office (RTO) to "
+            "update the RC book. We have also updated VAHAN records where applicable. "
+            "We apologize for the delay."
+        ),
+    },
+    {
+        "category": "Vehicle Loan",
+        "tier_level": 1,
+        "quality_score": 0.90,
+        "issue_type": "EMI Deducted Twice",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding duplicate EMI "
+            "deduction for your vehicle loan. Our investigation confirms two EMI "
+            "debits were processed on [DATE] due to a technical error in the "
+            "auto-debit system. The excess debit of Rs [AMOUNT] has been reversed "
+            "to your savings account with value dating to the original debit date "
+            "to ensure no loss of interest. We have also raised a technical ticket "
+            "to prevent recurrence. We sincerely apologize for the inconvenience."
+        ),
+    },
+
+    # ── Fixed Deposit (2nd and 3rd entries) ───────────────────────────────────
+    {
+        "category": "Fixed Deposit",
+        "tier_level": 1,
+        "quality_score": 0.95,
+        "issue_type": "FD Interest Rate Discrepancy",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the interest "
+            "rate applied to your Fixed Deposit. After reviewing your FD account, "
+            "we confirm the rate applied was lower than the rate advertised on the "
+            "date of booking. The differential interest of Rs [AMOUNT] has been "
+            "credited to your savings account. Your FD has been updated to reflect "
+            "the correct rate for the remaining tenure. A revised FD receipt will "
+            "be sent to your registered email within 2 working days. We apologize "
+            "for the discrepancy."
+        ),
+    },
+    {
+        "category": "Fixed Deposit",
+        "tier_level": 2,
+        "quality_score": 0.90,
+        "issue_type": "TDS Deducted Despite Form 15G Submission",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding TDS deduction "
+            "on your Fixed Deposit interest despite submission of Form 15G. Our "
+            "records confirm the form was submitted but not processed before the "
+            "interest credit date due to a system delay. We have raised a TDS "
+            "correction request with the Income Tax department. A TDS certificate "
+            "in Form 16A will be issued for the deducted amount, which you can "
+            "claim as a refund while filing your ITR. We apologize for the "
+            "inconvenience and have updated your records to prevent recurrence."
+        ),
+    },
+
+    # ── Insurance (2nd and 3rd entries) ──────────────────────────────────────
+    {
+        "category": "Insurance",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Claim Rejected",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the rejection "
+            "of your insurance claim. After reviewing the rejection reason provided "
+            "by the insurer, we have escalated this to our bancassurance grievance "
+            "cell. As per IRDAI guidelines, insurers must provide a detailed written "
+            "reason for claim rejection. We have requested the insurer to reconsider "
+            "your claim and provide a detailed explanation within 15 days. If the "
+            "rejection is upheld, you may approach the Insurance Ombudsman. We will "
+            "assist you through this process. We apologize for the distress caused."
+        ),
+    },
+    {
+        "category": "Insurance",
+        "tier_level": 3,
+        "quality_score": 0.90,
+        "issue_type": "Premium Deducted Without Consent",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding insurance "
+            "premium deduction without your explicit consent. This is a serious "
+            "violation of IRDAI and RBI bancassurance guidelines which mandate "
+            "written consent before any premium deduction. This matter has been "
+            "escalated to our Regional Compliance Officer. The premium amount of "
+            "Rs [AMOUNT] has been refunded to your account with immediate effect. "
+            "The policy has been cancelled and a cancellation confirmation will "
+            "be sent within 7 working days. We have initiated disciplinary action "
+            "against the concerned staff. We sincerely apologize."
+        ),
+    },
+
+    # ── Locker (2nd and 3rd entries) ──────────────────────────────────────────
+    {
+        "category": "Locker",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Locker Not Allotted Despite Payment",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding non-allotment "
+            "of a locker despite payment of the annual rent. As per RBI revised "
+            "locker guidelines effective January 2023, banks must maintain a "
+            "waitlist and allot lockers in order of registration. We confirm your "
+            "name is on the waitlist at [BRANCH] branch. A locker has now become "
+            "available and has been allotted to you. Please visit the branch with "
+            "your ID proof to complete the locker agreement formalities. The rent "
+            "paid will be adjusted against the current year. We apologize for the "
+            "wait."
+        ),
+    },
+    {
+        "category": "Locker",
+        "tier_level": 3,
+        "quality_score": 0.90,
+        "issue_type": "Locker Broken Into / Contents Missing",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your extremely serious complaint "
+            "regarding the alleged breach of your safe deposit locker. As per "
+            "RBI revised locker guidelines 2023, banks are liable for losses "
+            "due to their negligence up to 100 times the annual locker rent. "
+            "This matter has been escalated to our Regional Head and a formal "
+            "investigation has been initiated. The branch has been instructed to "
+            "preserve all CCTV footage and access logs. A police complaint has "
+            "been filed. Our Regional Nodal Officer will contact you within 24 "
+            "hours. We take this matter with the utmost seriousness and sincerely "
+            "apologize for the distress caused."
+        ),
+    },
+
+    # ── KYC (3rd entry) ───────────────────────────────────────────────────────
+    {
+        "category": "KYC",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Video KYC Failed Repeatedly",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding repeated "
+            "failures during Video KYC. This may occur due to poor network "
+            "connectivity, document quality, or system issues. We have reviewed "
+            "your Video KYC attempts and identified a technical issue on our end. "
+            "Our team has reset your Video KYC session. Please retry using a "
+            "stable internet connection in a well-lit environment with your "
+            "original Aadhaar and PAN ready. Alternatively, you may complete "
+            "your KYC by visiting your nearest branch. We apologize for the "
+            "repeated inconvenience."
+        ),
+    },
+
+    # ── Cheque (3rd entry) ────────────────────────────────────────────────────
+    {
+        "category": "Cheque",
+        "tier_level": 2,
+        "quality_score": 0.90,
+        "issue_type": "Cheque Truncation System Error",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the delay in "
+            "clearing of your cheque under the Cheque Truncation System (CTS). "
+            "The cheque presented on [DATE] was held due to an image quality "
+            "rejection in the CTS grid. We have re-presented the cheque with "
+            "corrected image parameters. The proceeds of Rs [AMOUNT] will be "
+            "credited to your account within 2 working days. We have also applied "
+            "delayed credit interest for the period of delay. We apologize for "
+            "the inconvenience caused."
+        ),
+    },
+
+    # ── General Banking — Tier 3 and 5 entries ────────────────────────────────
+    {
+        "category": "General Banking",
+        "tier_level": 3,
+        "quality_score": 0.95,
+        "issue_type": "Repeated Unresolved Complaint",
+        "resolution_text": (
+            "Dear Customer, we sincerely apologize that your complaint has not "
+            "been resolved despite multiple follow-ups. This is unacceptable and "
+            "does not reflect our service standards. Your complaint has been "
+            "escalated to our Regional Grievance Officer who will personally "
+            "oversee the resolution. You will receive a call from our Regional "
+            "team within 24 hours with a definitive resolution timeline. As a "
+            "goodwill gesture, we have waived all charges related to this complaint. "
+            "We assure you this will be resolved within 5 working days. We deeply "
+            "regret the repeated inconvenience."
+        ),
+    },
+    {
+        "category": "General Banking",
+        "tier_level": 5,
+        "quality_score": 1.0,
+        "issue_type": "RBI Ombudsman Escalation",
+        "resolution_text": (
+            "Dear Customer, we acknowledge that your complaint has been escalated "
+            "to the RBI Banking Ombudsman. We take this matter with the highest "
+            "priority. Our Nodal Officer has been assigned to handle your case "
+            "directly and will submit a detailed response to the Ombudsman within "
+            "the stipulated timeframe. We have reviewed your complaint history and "
+            "are committed to providing a fair and final resolution. Our Nodal "
+            "Officer will contact you within 24 hours. We sincerely apologize for "
+            "the experience that led to this escalation and assure you of our "
+            "full cooperation with the Ombudsman process."
+        ),
+    },
+
+    # ── NEFT (2nd entry) ──────────────────────────────────────────────────────
+    {
+        "category": "NEFT",
+        "tier_level": 2,
+        "quality_score": 0.95,
+        "issue_type": "Wrong Account Credited",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding NEFT credit "
+            "to a wrong account. As per RBI guidelines, if a wrong credit occurs "
+            "due to beneficiary details provided by the remitter, the bank is not "
+            "liable but must make best efforts to recover the funds. We have "
+            "immediately placed a lien on the beneficiary account and initiated "
+            "a recall request. If the beneficiary cooperates, the amount will be "
+            "reversed within 7 working days. If not, you may need to pursue "
+            "legal recourse. We will keep you updated on the recovery status. "
+            "We advise double-checking beneficiary details before future transfers."
+        ),
+    },
+
+    # ── Mobile Banking (2nd and 3rd entries) ──────────────────────────────────
+    {
+        "category": "Mobile Banking",
+        "tier_level": 1,
+        "quality_score": 0.95,
+        "issue_type": "Mobile Banking Registration Failed",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding failure to "
+            "register for mobile banking. This may occur if your mobile number "
+            "is not updated in our records or if there is a mismatch in your "
+            "account details. We have verified your records and updated your "
+            "registered mobile number. Please retry the registration process "
+            "using the OTP that will be sent to your updated number. If the "
+            "issue persists, please visit your nearest branch with your Aadhaar "
+            "and account passbook for assisted registration. We apologize for "
+            "the inconvenience."
+        ),
+    },
+    {
+        "category": "Mobile Banking",
+        "tier_level": 2,
+        "quality_score": 0.90,
+        "issue_type": "Fund Transfer Limit Not Increased",
+        "resolution_text": (
+            "Dear Customer, we acknowledge your complaint regarding the rejection "
+            "of your request to increase the mobile banking fund transfer limit. "
+            "As per RBI guidelines, enhanced transaction limits require additional "
+            "authentication and risk assessment. After reviewing your account "
+            "profile and transaction history, we have approved an increase in your "
+            "daily transfer limit to Rs [AMOUNT]. The revised limit will be active "
+            "within 4 hours. For limits above Rs 5 lakh per day, a branch visit "
+            "with ID proof is required. We apologize for the delay in processing "
+            "your request."
+        ),
+    },
 ]
 
 

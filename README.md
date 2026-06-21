@@ -32,7 +32,7 @@ Union Bank of India receives thousands of customer complaints daily across multi
 
 **RBI Ombudsman Fines (Regulatory Risk):** Solved via a dedicated RBI Compliance Module that actively tracks SLA deadlines and prevents costly regulatory penalties.
 
-**Generic Ticketing Systems (Misaligned Routing):** Solved by hardcoding the AI's routing engine to map exactly to Union Bank of India's real hierarchy (Tier 0 Bot → Tier 1 Branch → Tier 2 Regional → Tier 3 Zonal → Tier 4 Head Office).
+
 
 **Wasted Historical Data (The "Cold Start" Problem):** Solved via Bulk CSV Ingestion. Banks can upload years of old, resolved complaints to instantly train the AI on day one.
 
@@ -362,6 +362,7 @@ Each entry has:
 | `quality_score`   | 0.0–1.0 — used for ranking when embeddings are unavailable                     |
 | `verified`        | Admin-verified entries only appear in RAG retrieval                            |
 | `embedding`       | 512-dim OpenAI `text-embedding-3-small` vector for semantic search             |
+
 
 
 ### Auto-Enrichment Pipeline
