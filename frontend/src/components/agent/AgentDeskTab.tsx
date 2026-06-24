@@ -215,6 +215,179 @@ function IncidentAlertCard({ alert }: { alert: IncidentAlert }) {
   );
 }
 
+// ── Duplicate-merge components ────────────────────────────────────────────────
+
+interface MergeModalProps {
+  primaryId: string;
+  secondaryId: string;
+  primaryChannel?: string;
+  secondaryChannel?: string;
+  primaryText?: string;
+  secondaryText?: string;
+  primaryCif?: string | null;
+  secondaryCif?: string | null;
+  onClose: () => void;
+  onMerged: () => void;
+}
+
+function MergeModal({
+  primaryId, secondaryId,
+  primaryChannel, secondaryChannel,
+  primaryText, secondaryText,
+  primaryCif, secondaryCif,
+  onClose, onMerged,
+}: MergeModalProps) {
+  const [merging, setMerging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [chosenPrimary, setChosenPrimary] = useState<"left" | "right" | null>(null);
+
+  const doMerge = async (primId: string, secId: string) => {
+    setMerging(true);
+    setError(null);
+    try {
+      await api.duplicates.merge(primId, secId);
+      onMerged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Merge failed");
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const sides = [
+    { id: primaryId, channel: primaryChannel, text: primaryText, cif: primaryCif, side: "left" as const },
+    { id: secondaryId, channel: secondaryChannel, text: secondaryText, cif: secondaryCif, side: "right" as const },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 p-6">
+        <h2 className="text-sm font-semibold text-gray-800 mb-4">Merge Duplicate Complaints — pick which is the primary</h2>
+        {error && (
+          <div className="mb-3 rounded bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{error}</div>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          {sides.map((s) => (
+            <div key={s.id} className="border rounded-lg p-3 space-y-1">
+              <p className="text-xs font-mono text-gray-500">{s.id}</p>
+              <p className="text-xs text-gray-400">Channel: {s.channel ?? "—"}</p>
+              {s.cif && <p className="text-xs text-gray-400">CIF: {s.cif.slice(0, 8)}…</p>}
+              <p className="text-xs text-gray-700 line-clamp-4 mt-1">{s.text || "—"}</p>
+              <button
+                disabled={merging}
+                onClick={() => {
+                  setChosenPrimary(s.side);
+                  const other = sides.find((x) => x.side !== s.side)!;
+                  doMerge(s.id, other.id);
+                }}
+                className="mt-2 w-full text-xs px-3 py-1.5 rounded bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
+              >
+                {merging && chosenPrimary === s.side ? "Merging…" : "Make Primary"}
+              </button>
+            </div>
+          ))}
+        </div>
+        <button onClick={onClose} className="mt-4 text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+interface DuplicateBannerProps {
+  complaintId: string;
+  duplicateStatus: 'possible_duplicate' | 'confirmed_duplicate' | 'merged';
+  duplicateOf: string[];
+  ownCifId?: string | null;
+  ownChannel?: string;
+  ownText?: string;
+  onActionComplete: () => void;
+}
+
+function DuplicateBanner({
+  complaintId, duplicateStatus, duplicateOf, ownCifId, ownChannel, ownText, onActionComplete,
+}: DuplicateBannerProps) {
+  const [relatedMap, setRelatedMap] = useState<Record<string, { channel?: string; cif_id?: string | null; text?: string }>>({});
+  const [showMerge, setShowMerge] = useState<string | null>(null); // related ID to merge with
+  const [confirming, setConfirming] = useState(false);
+
+  useEffect(() => {
+    if (!duplicateOf.length) return;
+    duplicateOf.forEach((id) => {
+      api.complaints.get(id).then((c) => {
+        setRelatedMap((prev) => ({
+          ...prev,
+          [id]: { channel: c.channel, cif_id: c.cif_id, text: c.masked_text ?? c.original_text },
+        }));
+      }).catch(() => {});
+    });
+  }, [duplicateOf.join(",")]);
+
+  const allSameCif = duplicateOf.every((id) => relatedMap[id]?.cif_id === ownCifId);
+  const canMerge = duplicateStatus === 'confirmed_duplicate' || allSameCif;
+
+  const handleConfirm = async () => {
+    setConfirming(true);
+    try {
+      await api.duplicates.confirmSamePerson(complaintId);
+      onActionComplete();
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
+      <p className="text-xs font-semibold text-amber-800">Possible duplicate complaint(s) detected</p>
+      <div className="space-y-1">
+        {duplicateOf.map((id) => {
+          const r = relatedMap[id];
+          const diffCif = r?.cif_id !== ownCifId;
+          return (
+            <div key={id} className="flex flex-wrap items-center gap-2 text-xs text-amber-700">
+              {diffCif && r?.cif_id && (
+                <span className="font-mono text-red-600">CIF: {r.cif_id.slice(0, 8)}…</span>
+              )}
+              <span className="font-mono">{id}</span>
+              {r?.channel && <span className="text-amber-500">· {r.channel}</span>}
+              {canMerge && (
+                <button
+                  onClick={() => setShowMerge(id)}
+                  className="text-xs px-2 py-0.5 rounded bg-amber-500 text-white hover:bg-amber-600"
+                >
+                  Merge
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {!allSameCif && duplicateStatus === 'possible_duplicate' && (
+        <button
+          onClick={handleConfirm}
+          disabled={confirming}
+          className="text-xs px-2 py-1 rounded border border-amber-500 text-amber-800 hover:bg-amber-100 disabled:opacity-50"
+        >
+          {confirming ? "Confirming…" : "Confirm same person"}
+        </button>
+      )}
+      {showMerge && (
+        <MergeModal
+          primaryId={complaintId}
+          secondaryId={showMerge}
+          primaryChannel={ownChannel}
+          secondaryChannel={relatedMap[showMerge]?.channel}
+          primaryText={ownText}
+          secondaryText={relatedMap[showMerge]?.text}
+          primaryCif={ownCifId}
+          secondaryCif={relatedMap[showMerge]?.cif_id}
+          onClose={() => setShowMerge(null)}
+          onMerged={() => { setShowMerge(null); onActionComplete(); }}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── Case Detail Modal ─────────────────────────────────────────────────────────
 type ActionMode = "idle" | "edit" | "reject" | "escalate";
 
@@ -315,8 +488,23 @@ function CaseDetailModal({
         submitted_at?: string;
         current_tier?: number;
         status?: string;
+        identity_status?: 'provisional' | 'verified' | 'unverifiable';
+        cif_id?: string | null;
+        linked_complaint_ids?: string[];
+        pending_info_request?: boolean;
+        duplicate_status?: 'possible_duplicate' | 'confirmed_duplicate' | 'merged';
+        duplicate_of?: string[];
       }
     | undefined;
+
+  const reloadDetails = async () => {
+    try {
+      const ctx = await api.agent.complaintContext(caseId, staffId);
+      setDetails(ctx);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const ai = details?.ai_analysis;
   const draft = details?.draft_response;
@@ -418,6 +606,59 @@ function CaseDetailModal({
                     </span>
                   )}
                 </div>
+              )}
+
+              {/* Identity status badge */}
+              {summary?.identity_status && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      summary.identity_status === "verified"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : summary.identity_status === "unverifiable"
+                          ? "bg-red-100 text-red-700"
+                          : "bg-gray-100 text-gray-500"
+                    }`}
+                  >
+                    {summary.identity_status === "verified"
+                      ? "Identity Verified"
+                      : summary.identity_status === "unverifiable"
+                        ? "Unverifiable"
+                        : "Identity Unverified"}
+                  </span>
+                  {summary.pending_info_request && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                      Awaiting account number
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Linked complaints banner */}
+              {(summary?.linked_complaint_ids?.length ?? 0) > 0 && (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 flex items-start gap-2">
+                  <AlertTriangle size={13} className="text-sky-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-xs text-sky-800">
+                    <span className="font-semibold">Same customer filed {summary!.linked_complaint_ids!.length} other complaint{summary!.linked_complaint_ids!.length > 1 ? "s" : ""}:</span>{" "}
+                    {summary!.linked_complaint_ids!.map((id) => (
+                      <span key={id} className="font-mono">{id}{" "}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Cross-channel duplicate banner */}
+              {summary?.duplicate_status && summary.duplicate_status !== 'merged' &&
+                (summary.duplicate_of?.length ?? 0) > 0 && (
+                <DuplicateBanner
+                  complaintId={caseId}
+                  duplicateStatus={summary.duplicate_status}
+                  duplicateOf={summary.duplicate_of ?? []}
+                  ownCifId={summary.cif_id}
+                  ownChannel={summary.channel}
+                  ownText={summary.masked_text}
+                  onActionComplete={reloadDetails}
+                />
               )}
 
               {/* Complaint text */}

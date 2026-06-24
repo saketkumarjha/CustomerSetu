@@ -27,6 +27,7 @@ from app.middleware.idempotency import cache_idempotency_response
 from app.db.supabase_client import get_supabase
 from app.services.signal_extractor import extract_and_store_signals
 from app.services.cluster_builder import build_clusters
+from app.services.duplicate_service import detect_cross_channel_duplicates
 
 router = APIRouter()
 
@@ -75,6 +76,12 @@ async def run_pipeline(initial_state: PipelineState) -> None:
         # Runs inline here; a separate scheduler also fires every 5 min.
         # If this is slow in production, move to asyncio.create_task().
         await build_clusters()
+
+        # ── Cross-channel duplicate detection ─────────────────────────────────
+        try:
+            detect_cross_channel_duplicates(complaint_id)
+        except Exception as dedup_exc:
+            logger.warning("[DEDUP] Detection failed for %s: %s", complaint_id, dedup_exc)
 
         # Build the final summary for the SSE stream and idempotency cache
         route = final_state.get("route")

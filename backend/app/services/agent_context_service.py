@@ -89,12 +89,18 @@ def prepare_review_context(complaint_id: str) -> dict:
     return {
         "complaint_id": complaint_id,
         "complaint_summary": {
-            "masked_text":  c.get("masked_text") or c.get("complaint_text", ""),
-            "channel":      c.get("channel"),
-            "customer_id":  c.get("customer_id"),
-            "submitted_at": c.get("created_at"),
-            "current_tier": c.get("current_tier"),
-            "status":       c.get("status"),
+            "masked_text":           c.get("masked_text") or c.get("complaint_text", ""),
+            "channel":               c.get("channel"),
+            "customer_id":           c.get("customer_id"),
+            "submitted_at":          c.get("created_at"),
+            "current_tier":          c.get("current_tier"),
+            "status":                c.get("status"),
+            "identity_status":       c.get("identity_status", "provisional"),
+            "cif_id":                c.get("cif_id"),
+            "linked_complaint_ids":  c.get("linked_complaint_ids") or [],
+            "pending_info_request":  c.get("pending_info_request", False),
+            "duplicate_status":      c.get("duplicate_status"),
+            "duplicate_of":          c.get("duplicate_of") or [],
         },
         "ai_analysis": {
             "classification": {

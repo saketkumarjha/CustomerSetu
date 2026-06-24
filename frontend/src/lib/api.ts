@@ -215,6 +215,12 @@ export interface AgentComplaintContext {
     submitted_at?: string;
     current_tier?: number;
     status?: string;
+    identity_status?: 'provisional' | 'verified' | 'unverifiable';
+    cif_id?: string | null;
+    linked_complaint_ids?: string[];
+    pending_info_request?: boolean;
+    duplicate_status?: 'possible_duplicate' | 'confirmed_duplicate' | 'merged';
+    duplicate_of?: string[];
   };
   ai_analysis?: {
     classification?: { category?: string; confidence?: number };
@@ -457,6 +463,17 @@ export const api = {
     setAutoMode: (enabled: boolean) =>
       apiPost<{ enabled: boolean }>("/api/v1/settings/auto-mode", { enabled }),
   },
+  duplicates: {
+    merge: (primaryId: string, secondaryId: string) =>
+      apiPost<{ status: string; primary_id: string; secondary_id: string }>(
+        '/api/v1/duplicates/merge',
+        { primary_id: primaryId, secondary_id: secondaryId },
+      ),
+    confirmSamePerson: (complaintId: string) =>
+      apiPost<{ status: string; complaint_id: string }>(
+        `/api/v1/duplicates/${encodeURIComponent(complaintId)}/confirm-same-person`,
+      ),
+  },
   incidents: {
     list: (params?: { min_priority?: string }) => {
       const qs = new URLSearchParams();
@@ -565,9 +582,16 @@ export interface ApiComplaint {
   image_url?: string;
   extraction_method?: string;
   is_duplicate?: boolean;
-  duplicate_of?: string;
+  duplicate_of?: string[];
   duplicate_similarity?: number;
+  duplicate_status?: 'possible_duplicate' | 'confirmed_duplicate' | 'merged';
+  merged_into?: string | null;
   created_at?: string;
+  /** Identity resolution fields */
+  identity_status?: 'provisional' | 'verified' | 'unverifiable';
+  cif_id?: string | null;
+  linked_complaint_ids?: string[];
+  pending_info_request?: boolean;
 }
 
 export interface ComplaintsListResponse {
