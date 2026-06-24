@@ -4,15 +4,15 @@
 
 **Goal:** Detect semantically similar complaints (≥ 0.85 cosine similarity) across channels, flag them for agent review, and allow agents to merge the secondary into the primary with full UI support.
 
-**Architecture:** Detection runs post-pipeline in a dedicated `duplicate_service.py` — it queries pgvector for similar complaints across all channels, flags both records, and stores cross-references in a new `cross_duplicate_ids` column. Two new API endpoints handle merge and same-person confirmation. Frontend surfaces amber badges in the complaint table and a contextual banner in the detail view with a side-by-side merge modal.
+**Architecture:** Detection runs post-pipeline in a dedicated `duplicate_service.py` — it queries pgvector for similar complaints across all channels, flags both records, and stores cross-references in a `duplicate_of uuid[]` column. Two new API endpoints handle merge and same-person confirmation. Frontend surfaces amber badges in the complaint table and a contextual banner in the detail view with a side-by-side merge modal.
 
 **Tech Stack:** FastAPI, Supabase (pgvector cosine similarity), React + TypeScript, existing `supabase-js` client pattern.
 
 ## Global Constraints
 
 - LangGraph pipeline (`graph.py`) must NOT be modified
-- Existing `duplicate_of` column on `complaints` is owned by LangGraph Node 2 — do not touch it
-- New column for cross-channel dedup is `cross_duplicate_ids uuid[] not null default '{}'`
+- `duplicate_of uuid[]` is the cross-channel dedup column — the old single-UUID `duplicate_of` was deleted from the DB; this replaces it
+- `pipeline.py` `_save_pipeline_outputs()` no longer writes `duplicate_of`; that column is owned entirely by `duplicate_service.py`
 - All backend routes follow the pattern in existing route files: `APIRouter()`, `get_supabase()` for DB access
 - Frontend API calls go through `frontend/src/lib/api.ts` — no direct fetch calls in components
 - cosine similarity threshold: **0.85** (not 0.92 — that's Node 2's threshold)
@@ -40,7 +40,7 @@
 - SQL to run manually in Supabase dashboard
 
 **Interfaces:**
-- Produces: `complaints.duplicate_status`, `complaints.cross_duplicate_ids`, `complaints.merged_into` columns
+- Produces: `complaints.duplicate_status`, `complaints.duplicate_of`, `complaints.merged_into` columns
 
 - [ ] **Step 1: Run SQL in Supabase dashboard**
 
@@ -49,7 +49,7 @@ alter table complaints
   add column duplicate_status    text check (
     duplicate_status in ('possible_duplicate', 'confirmed_duplicate', 'merged')
   ),
-  add column cross_duplicate_ids uuid[]  not null default '{}',
+  add column duplicate_of uuid[]  not null default '{}',
   add column merged_into         uuid    references complaints(complaint_id);
 
 create index on complaints (duplicate_status);
@@ -60,7 +60,7 @@ create index on complaints (duplicate_status);
 In Supabase Table Editor, open `complaints` and confirm the three new columns appear with correct types. Run:
 
 ```sql
-select complaint_id, duplicate_status, cross_duplicate_ids, merged_into
+select complaint_id, duplicate_status, duplicate_of, merged_into
 from complaints
 limit 1;
 ```
@@ -101,7 +101,7 @@ def detect_cross_channel_duplicates(complaint_id: str) -> None:
     """
     Query pgvector for complaints similar to complaint_id (cosine similarity >= 0.85)
     filed on a different channel. Flag both sides as 'possible_duplicate' and
-    append each other's ID to cross_duplicate_ids[].
+    append each other's ID to duplicate_of[].
 
     Skips complaints that are already merged (duplicate_status = 'merged').
     Safe to call multiple times — uses set logic to avoid duplicate entries in the array.
@@ -161,16 +161,16 @@ def detect_cross_channel_duplicates(complaint_id: str) -> None:
     # Flag the new complaint
     supabase.table("complaints").update({
         "duplicate_status":    "possible_duplicate",
-        "cross_duplicate_ids": similar_ids,
+        "duplicate_of": similar_ids,
     }).eq("complaint_id", complaint_id).execute()
 
     # Flag each similar complaint (append this complaint_id to their array)
     for hit in similar:
-        existing_ids: list = hit.get("cross_duplicate_ids") or []
+        existing_ids: list = hit.get("duplicate_of") or []
         if complaint_id not in existing_ids:
             supabase.table("complaints").update({
                 "duplicate_status":    "possible_duplicate",
-                "cross_duplicate_ids": existing_ids + [complaint_id],
+                "duplicate_of": existing_ids + [complaint_id],
             }).eq("complaint_id", hit["complaint_id"]).execute()
 ```
 
@@ -191,7 +191,7 @@ returns table (
   channel              text,
   cif_id               uuid,
   duplicate_status     text,
-  cross_duplicate_ids  uuid[],
+  duplicate_of  uuid[],
   similarity           float
 )
 language sql stable
@@ -201,7 +201,7 @@ as $$
     c.channel,
     c.cif_id,
     c.duplicate_status,
-    c.cross_duplicate_ids,
+    c.duplicate_of,
     1 - (c.embedding <=> query_embedding) as similarity
   from complaints c
   where
@@ -335,13 +335,13 @@ def merge_complaints(body: MergeRequest):
 def confirm_same_person(complaint_id: str):
     """
     Sets duplicate_status='confirmed_duplicate' on this complaint and all
-    complaints listed in its cross_duplicate_ids[] that have a different cif_id.
+    complaints listed in its duplicate_of[] that have a different cif_id.
     This unlocks the merge button on the frontend.
     """
     supabase = get_supabase()
 
     own = supabase.table("complaints").select(
-        "complaint_id, cif_id, cross_duplicate_ids"
+        "complaint_id, cif_id, duplicate_of"
     ).eq("complaint_id", complaint_id).execute()
 
     if not own.data:
@@ -349,7 +349,7 @@ def confirm_same_person(complaint_id: str):
 
     row = own.data[0]
     own_cif = row.get("cif_id")
-    related_ids: list = row.get("cross_duplicate_ids") or []
+    related_ids: list = row.get("duplicate_of") or []
 
     # Mark this complaint confirmed
     supabase.table("complaints").update({
@@ -461,7 +461,7 @@ git commit -m "feat: call detect_cross_channel_duplicates after pipeline complet
 **Interfaces:**
 - Produces:
   - `ApiComplaint.duplicate_status?: 'possible_duplicate' | 'confirmed_duplicate' | 'merged'`
-  - `ApiComplaint.cross_duplicate_ids?: string[]`
+  - `ApiComplaint.duplicate_of?: string[]`
   - `ApiComplaint.merged_into?: string | null`
   - `api.duplicates.merge(primaryId: string, secondaryId: string): Promise<{status: string, primary_id: string, secondary_id: string}>`
   - `api.duplicates.confirmSamePerson(complaintId: string): Promise<{status: string, complaint_id: string}>`
@@ -472,7 +472,7 @@ In `frontend/src/lib/api.ts`, find the `ApiComplaint` interface and add:
 
 ```typescript
   duplicate_status?: 'possible_duplicate' | 'confirmed_duplicate' | 'merged';
-  cross_duplicate_ids?: string[];
+  duplicate_of?: string[];
   merged_into?: string | null;
 ```
 
@@ -531,7 +531,7 @@ git commit -m "feat: add duplicate types and API methods to api.ts"
 - Modify: `frontend/src/components/ComplaintsTab.tsx`
 
 **Interfaces:**
-- Consumes: `ApiComplaint.duplicate_status`, `ApiComplaint.cross_duplicate_ids` from Task 5
+- Consumes: `ApiComplaint.duplicate_status`, `ApiComplaint.duplicate_of` from Task 5
 - Produces: amber "Duplicate?" badge on flagged rows, inline "Resolve" button that opens merge modal (modal built in Task 7)
 
 - [ ] **Step 1: Locate the complaint row rendering**
@@ -620,7 +620,7 @@ git commit -m "feat: show duplicate badge and resolve button in complaints table
 
 **Interfaces:**
 - Consumes:
-  - `ApiComplaint.duplicate_status`, `cross_duplicate_ids`, `merged_into`, `cif_id` from Task 5
+  - `ApiComplaint.duplicate_status`, `duplicate_of`, `merged_into`, `cif_id` from Task 5
   - `api.duplicates.merge()`, `api.duplicates.confirmSamePerson()` from Task 5
 - Produces:
   - `MergeModal` component (used by Task 6's `ComplaintsTab` and by Agent Desk detail view)
@@ -636,7 +636,7 @@ In `AgentDeskTab.tsx`, in the case modal section where `summary?.identity_status
   <DuplicateBanner
     complaintId={complaintId}
     duplicateStatus={summary.duplicate_status}
-    crossDuplicateIds={summary.cross_duplicate_ids ?? []}
+    crossDuplicateIds={summary.duplicate_of ?? []}
     ownCifId={summary.cif_id ?? null}
     onActionComplete={refetch}
   />

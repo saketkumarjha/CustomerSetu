@@ -259,7 +259,7 @@ async def _save_pipeline_outputs(complaint_id: str, state: PipelineState) -> Non
         "language":                 state.get("language"),
         # ── Duplicate detection ───────────────────────────────────────────────
         "is_duplicate":             state.get("is_duplicate", False),
-        "duplicate_of":             state.get("duplicate_of"),
+        # duplicate_of (uuid[]) is owned by duplicate_service.py — not written here
         # ── Classification ────────────────────────────────────────────────────
         "category":                 state.get("category"),
         "category_confidence":      state.get("category_confidence"),
