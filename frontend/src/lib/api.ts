@@ -457,7 +457,38 @@ export const api = {
     setAutoMode: (enabled: boolean) =>
       apiPost<{ enabled: boolean }>("/api/v1/settings/auto-mode", { enabled }),
   },
+  incidents: {
+    list: (params?: { min_priority?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.min_priority) qs.set("min_priority", params.min_priority);
+      return apiGet<IncidentAlertsResponse>(`/api/v1/clusters/alerts?${qs}`);
+    },
+  },
 };
+
+// ── Incident alert types (Predictive Complaint Intelligence) ─────────────────
+
+export interface IncidentAlert {
+  cluster_id: string;
+  event_type: string;
+  product?: string | null;
+  region?: string | null;
+  alert_priority: "low" | "medium" | "high" | "critical";
+  risk_score?: number | null;
+  growth_probability?: number | null;
+  predicted_impact_customers?: number | null;
+  confidence_score?: number | null;
+  distinct_customers_24h?: number | null;
+  rbi_reportable_ratio?: number | null;
+  last_seen_at?: string | null;
+  snapshot_time?: string | null;
+  departments: string[];
+}
+
+export interface IncidentAlertsResponse {
+  alerts: IncidentAlert[];
+  total: number;
+}
 
 // ── Backend API response types ────────────────────────────────────────────────
 

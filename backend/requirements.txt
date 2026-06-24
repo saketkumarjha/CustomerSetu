@@ -126,3 +126,13 @@ schemathesis>=3.36.0
 
 # Google Gemini AI
 google-generativeai>=0.8.0
+
+# Predictive Complaint Intelligence — incident scoring model
+lightgbm==4.6.0
+scikit-learn==1.6.1
+shap==0.47.2
+pandas==2.3.0
+joblib==1.5.1
+
+# Scheduler (cluster builder + incident scorer, runs every 5 min)
+APScheduler==3.11.0

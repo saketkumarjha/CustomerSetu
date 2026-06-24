@@ -75,14 +75,44 @@ async def lifespan(app: FastAPI):
     from app.services.email_poller import run_email_poller
     _poller_task = asyncio.create_task(run_email_poller())
 
+    # ── Start cluster builder + incident scorer scheduler ─────────────────────
+    # Runs every 5 minutes:
+    #   1. build_clusters()         — aggregates complaint_signals → complaint_clusters
+    #   2. score_pending_clusters() — scores unscored clusters with the incident model
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    from app.services.cluster_builder import build_clusters, score_pending_clusters
+
+    _scheduler = AsyncIOScheduler()
+    _scheduler.add_job(
+        build_clusters,
+        "interval",
+        minutes=5,
+        id="build_clusters",
+        max_instances=1,    # prevent overlap if a run takes longer than 5 min
+        coalesce=True,
+    )
+    _scheduler.add_job(
+        score_pending_clusters,
+        "interval",
+        minutes=5,
+        id="score_clusters",
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.start()
+    logger.info("[STARTUP] Cluster builder + incident scorer scheduler started (every 5 min)")
+
     yield
 
-    # ── Shutdown: cancel the poller and wait for it to exit cleanly ───────────
+    # ── Shutdown: cancel the poller and stop the scheduler ────────────────────
     _poller_task.cancel()
     try:
         await _poller_task
     except asyncio.CancelledError:
         pass
+
+    _scheduler.shutdown(wait=False)
+    logger.info("[SHUTDOWN] Scheduler stopped")
 app = FastAPI(
     title="Unified Complaint Dashboard API",
     description=(

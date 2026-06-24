@@ -25,6 +25,8 @@ from app.services.supervisor.audit_trail import (
 )
 from app.middleware.idempotency import cache_idempotency_response
 from app.db.supabase_client import get_supabase
+from app.services.signal_extractor import extract_and_store_signals
+from app.services.cluster_builder import build_clusters
 
 router = APIRouter()
 
@@ -56,6 +58,23 @@ async def run_pipeline(initial_state: PipelineState) -> None:
 
         # Persist all pipeline outputs to complaints table
         await _save_pipeline_outputs(complaint_id, final_state)
+
+        # ── Signal Extraction Layer ───────────────────────────────────────────
+        # Normalise pipeline outputs → complaint_signals row.
+        # Must run AFTER _save_pipeline_outputs so the complaints FK exists.
+        # customer_id is passed explicitly from initial_state because LangGraph
+        # does not guarantee input-only fields survive into final_state.
+        await extract_and_store_signals(
+            complaint_id,
+            final_state,
+            customer_id=initial_state.get("customer_id"),
+        )
+
+        # ── Cluster Builder ───────────────────────────────────────────────────
+        # Rebuild active clusters from the last 24 h of signals.
+        # Runs inline here; a separate scheduler also fires every 5 min.
+        # If this is slow in production, move to asyncio.create_task().
+        await build_clusters()
 
         # Build the final summary for the SSE stream and idempotency cache
         route = final_state.get("route")
@@ -533,7 +552,7 @@ async def debug_logs(lines: int = 200):
     """
     Returns the last N lines of the application log file.
     Checks /home/LogFiles/application.log first, then /tmp/application.log.
-    """
+    """ 
     for log_path in ("/home/LogFiles/application.log", "/tmp/application.log"):
         if os.path.exists(log_path):
             try:

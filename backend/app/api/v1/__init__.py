@@ -13,6 +13,7 @@ from app.api.v1.routes import (
     channels,
     debug,
     settings,
+    clusters,
 )
 
 # Shared security scheme — makes Swagger show the padlock and documents 401
@@ -103,5 +104,11 @@ api_v1_router.include_router(
     settings.router,
     prefix="/settings",
     tags=["Settings"],
+    **_PROTECTED,
+)
+api_v1_router.include_router(
+    clusters.router,
+    prefix="/clusters",
+    tags=["Incidents"],
     **_PROTECTED,
 )
