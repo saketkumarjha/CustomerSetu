@@ -197,6 +197,9 @@ export interface Complaint {
   description: string;
   history: HistoryEntry[];
   agentResult: AgentResult;
+  duplicateStatus?: 'possible_duplicate' | 'confirmed_duplicate' | 'merged';
+  duplicateOf?: string[];
+  mergedInto?: string;
 }
 
 // ── Analytics chart types ─────────────────────────────────────────────────────
