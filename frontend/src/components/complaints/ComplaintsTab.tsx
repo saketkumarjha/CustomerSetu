@@ -84,6 +84,9 @@ function apiToFrontend(c: ApiComplaint): Complaint {
         })
       : "—",
     description: c.masked_text ?? c.merged_text ?? "—",
+    duplicateStatus: c.duplicate_status as Complaint['duplicateStatus'],
+    duplicateOf: c.duplicate_of ?? [],
+    mergedInto: c.merged_into ?? undefined,
     history: [],
     agentResult: {
       classification: {
@@ -142,9 +145,21 @@ export function ComplaintsTab({
 
   const usingApi = !!apiData && !listError;
 
-  const complaints: Complaint[] = usingApi
+  const allComplaints: Complaint[] = usingApi
     ? apiData.complaints.map(apiToFrontend)
     : COMPLAINTS;
+
+  // Group merged children under their parent
+  const mergedChildrenMap = new Map<string, Complaint[]>();
+  for (const c of allComplaints) {
+    if (c.mergedInto) {
+      const existing = mergedChildrenMap.get(c.mergedInto) ?? [];
+      mergedChildrenMap.set(c.mergedInto, [...existing, c]);
+    }
+  }
+
+  // Only parent/standalone complaints appear as top-level rows
+  const complaints: Complaint[] = allComplaints.filter((c) => !c.mergedInto);
 
   const filtered = complaints.filter((c) => {
     const q = search.toLowerCase();
@@ -272,6 +287,7 @@ export function ComplaintsTab({
           complaints={filtered}
           selected={enrichedSelected}
           onSelect={handleSelect}
+          mergedChildrenMap={mergedChildrenMap}
         />
       </div>
 
