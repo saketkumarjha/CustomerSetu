@@ -32,7 +32,7 @@ interface MergedChildrenPanelProps {
 function MergedChildrenPanel({ mergedItems, isExpanded, onSelect }: MergedChildrenPanelProps) {
   return (
     <div
-      className={`overflow-hidden transition-all duration-200 ease-in-out ${
+      className={`overflow-hidden transition-[max-height] duration-200 ease-in-out ${
         isExpanded ? "max-h-[600px]" : "max-h-0"
       }`}
     >
