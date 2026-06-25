@@ -102,7 +102,7 @@ function MergedChildrenPanel({ mergedItems, isExpanded, onSelect }: MergedChildr
 
                 {/* Status + Merged pill */}
                 <span className="flex items-center gap-1 flex-shrink-0">
-                  <StatusBadge status={child.status} />
+                  <StatusBadge status="Resolved" />
                   <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500 font-medium">
                     Merged
                   </span>
