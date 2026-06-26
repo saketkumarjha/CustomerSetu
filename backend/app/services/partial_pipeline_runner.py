@@ -18,6 +18,35 @@ from app.services.tier_context_manager import get_tier_context
 from app.utils.escalation_cost_optimizer import determine_agents_to_rerun
 
 
+def _normalize_grounding_state(
+    score: float | None,
+    warnings: list,
+) -> tuple[float | None, list]:
+    warnings = warnings or []
+
+    if score is None:
+        return None, []
+
+    if score == 1.0:
+        return 1.0, []
+
+    if score == 0.0:
+        has_system_error = any(
+            isinstance(w, dict) and w.get("type") == "SYSTEM_ERROR"
+            for w in warnings
+        )
+        if not has_system_error:
+            warnings = [{
+                "type": "SYSTEM_ERROR",
+                "claim": "Grounding state repaired",
+                "issue": "Grounding failed but no SYSTEM_ERROR warning was present.",
+                "suggestion": "Review the draft manually.",
+            }]
+        return 0.0, warnings
+
+    return score, warnings
+
+
 async def run_tier_transition_pipeline(
     complaint_id: str,
     new_tier_level: int,
@@ -93,8 +122,10 @@ async def run_tier_transition_pipeline(
 
     # ── Agent 9: Grounding (conditional on draft delta) ───────────────────────
     previous_draft = original_state.get("draft_response", "")
-    grounding_score: float = original_state.get("grounding_score", 0.8) or 0.8
-    grounding_warnings: list = original_state.get("grounding_warnings", []) or []
+    grounding_score, grounding_warnings = _normalize_grounding_state(
+        original_state.get("grounding_score"),
+        original_state.get("grounding_warnings"),
+    )
 
     agents_to_run = determine_agents_to_rerun(
         from_tier, new_tier_level, previous_draft, draft_response
@@ -113,6 +144,13 @@ async def run_tier_transition_pipeline(
             grounding_warnings = grounding_result.get("warnings", grounding_warnings)
         except Exception as e:
             errors.append(f"Agent 9 (Grounding) failed at Tier {new_tier_level}: {e}")
+            grounding_score = 0.0
+            grounding_warnings = [{
+                "type": "SYSTEM_ERROR",
+                "claim": "Grounding check failed during escalation re-run",
+                "issue": str(e),
+                "suggestion": "Human agent must manually verify all claims in draft",
+            }]
 
     # ── Agent 10: Routing decision ────────────────────────────────────────────
     route: str = "ESCALATE"
