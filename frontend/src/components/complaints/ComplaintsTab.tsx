@@ -1,10 +1,9 @@
 import { useState, useCallback } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, WifiOff } from "lucide-react";
 import type { Complaint, Status, Severity, TabId } from "../../types";
-import { COMPLAINTS } from "../../data/complaints";
 import { ComplaintsFilters } from "./ComplaintsFilters";
 import { ComplaintsTable } from "./ComplaintsTable";
-import { ComplaintDetailModal } from "./ComplaintDetailModal";
+import { ComplaintDetailPanel } from "./detail/ComplaintDetailPanel";
 import { api, type ApiComplaint } from "../../lib/api";
 import { useApiData } from "../../hooks/useApiData";
 import {
@@ -147,7 +146,7 @@ export function ComplaintsTab({
 
   const allComplaints: Complaint[] = usingApi
     ? apiData.complaints.map(apiToFrontend)
-    : COMPLAINTS;
+    : [];
 
   // Group merged children under their parent
   const mergedChildrenMap = new Map<string, Complaint[]>();
@@ -156,6 +155,12 @@ export function ComplaintsTab({
       const existing = mergedChildrenMap.get(c.mergedInto) ?? [];
       mergedChildrenMap.set(c.mergedInto, [...existing, c]);
     }
+  }
+
+  // Build cif_id lookup for history column (complaint_id → cif_id)
+  const cifIdMap = new Map<string, string>();
+  for (const c of apiData?.complaints ?? []) {
+    if (c.cif_id) cifIdMap.set(c.complaint_id, c.cif_id);
   }
 
   // Only parent/standalone complaints appear as top-level rows
@@ -248,17 +253,9 @@ export function ComplaintsTab({
     <div className="flex flex-col gap-4">
       {/* Status bar */}
       <div className="flex items-center gap-3 flex-wrap">
-        {listLoading && (
-          <span className="text-xs text-gray-400">Loading complaints…</span>
-        )}
         {usingApi && !listLoading && (
           <span className="text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
             Live · {apiData.total} total
-          </span>
-        )}
-        {listError && (
-          <span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md">
-            Sample data (offline)
           </span>
         )}
         {usingApi && (
@@ -281,27 +278,46 @@ export function ComplaintsTab({
         resultCount={filtered.length}
       />
 
-      {/* Full-width table — modal opens on row click */}
-      <div style={{ minHeight: "60vh" }}>
-        <ComplaintsTable
-          complaints={filtered}
-          selected={enrichedSelected}
-          onSelect={handleSelect}
-          mergedChildrenMap={mergedChildrenMap}
-        />
-      </div>
+      {/* Error panel */}
+      {listError && !listLoading && (
+        <div className="glass-panel flex flex-col items-center justify-center gap-3 py-20 text-center">
+          <WifiOff size={32} className="text-gray-300" />
+          <p className="text-sm font-semibold text-gray-600">Could not load complaints</p>
+          <p className="text-xs text-gray-400 max-w-xs">{listError}</p>
+          <button
+            onClick={refetch}
+            className="mt-1 flex items-center gap-1.5 text-xs font-medium text-ub-blue hover:underline"
+          >
+            <RefreshCw size={12} /> Retry
+          </button>
+        </div>
+      )}
 
-      {/* Centered modal — works on all screen sizes */}
-      {enrichedSelected && (
-        <ComplaintDetailModal
-          complaint={enrichedSelected}
-          onClose={handleClose}
-          loadingDetail={loadingDetail}
-          apiDetail={apiComplaintDetail}
-          pipelineAvailable={usingApi}
-          onAfterRunPipeline={() => setActive?.("pipeline")}
-          onComplaintUpdated={onComplaintUpdated}
-        />
+      {/* Table + side panel */}
+      {!listError && (
+        <div className="flex flex-row gap-0 min-h-[60vh]">
+          <div className="flex-1 min-w-0">
+            <ComplaintsTable
+              complaints={filtered}
+              selected={enrichedSelected}
+              onSelect={handleSelect}
+              mergedChildrenMap={mergedChildrenMap}
+              loading={listLoading}
+              cifIdMap={cifIdMap}
+            />
+          </div>
+          {enrichedSelected && (
+            <ComplaintDetailPanel
+              complaint={enrichedSelected}
+              onClose={handleClose}
+              loadingDetail={loadingDetail}
+              apiDetail={apiComplaintDetail}
+              pipelineAvailable={usingApi}
+              onAfterRunPipeline={() => setActive?.("pipeline")}
+              onComplaintUpdated={onComplaintUpdated}
+            />
+          )}
+        </div>
       )}
     </div>
   );
