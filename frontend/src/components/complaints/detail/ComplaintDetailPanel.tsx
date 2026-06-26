@@ -48,6 +48,50 @@ function GroundingWarningRow({ w }: { w: string | GroundingWarningItem }) {
   );
 }
 
+type GroundingStatus = "skipped" | "passed" | "warnings" | "failed";
+
+function deriveGroundingStatus(
+  score: number | null | undefined,
+  warnings: (string | GroundingWarningItem)[] | undefined,
+): GroundingStatus {
+  if (score === null || score === undefined) return "skipped";
+  if (
+    score === 0.0 &&
+    (warnings ?? []).some(
+      (w) => typeof w === "object" && (w as GroundingWarningItem).type === "SYSTEM_ERROR",
+    )
+  )
+    return "failed";
+  if ((warnings ?? []).length > 0) return "warnings";
+  return "passed";
+}
+
+function buildWarningSummary(
+  warnings: (string | GroundingWarningItem)[],
+): string[] {
+  const counts: Record<string, number> = {};
+  for (const w of warnings) {
+    if (typeof w === "object" && (w as GroundingWarningItem).type) {
+      const t = (w as GroundingWarningItem).type!;
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+  }
+  const lines: string[] = [];
+  if (counts["UNVERIFIABLE_CLAIM"])
+    lines.push(
+      `${counts["UNVERIFIABLE_CLAIM"]} unsupported claim${counts["UNVERIFIABLE_CLAIM"] > 1 ? "s" : ""} detected.`,
+    );
+  if (counts["RBI_COMPLIANCE"])
+    lines.push(
+      `${counts["RBI_COMPLIANCE"]} RBI compliance issue${counts["RBI_COMPLIANCE"] > 1 ? "s" : ""} found.`,
+    );
+  if (counts["AUTHORITY_EXCEEDED"])
+    lines.push(
+      `${counts["AUTHORITY_EXCEEDED"]} authority violation${counts["AUTHORITY_EXCEEDED"] > 1 ? "s" : ""} detected.`,
+    );
+  return lines;
+}
+
 /** Route/status pill — maps backend values to a human-readable label */
 function RouteStatusPill({
   route,
@@ -444,28 +488,122 @@ export function ComplaintDetailPanel({
           enabled={!!apiDetail}
         />
 
-        {/* Grounding info */}
-        {apiDetail?.grounding_score !== undefined && (
-          <section className="rounded-md p-3 border border-slate-200 bg-slate-50/80 text-xs text-slate-700">
-            <div className="font-semibold text-slate-800 mb-1">
-              Source check
-            </div>
-            <div>
-              Match score:{" "}
-              <span className="font-semibold text-ub-blue">
-                {Math.round(apiDetail.grounding_score * 100)}%
-              </span>
-            </div>
-            {apiDetail.grounding_warnings &&
-              apiDetail.grounding_warnings.length > 0 && (
-                <ul className="mt-1.5 space-y-1">
-                  {apiDetail.grounding_warnings.map((w, i) => (
-                    <GroundingWarningRow key={i} w={w} />
-                  ))}
-                </ul>
+        {/* Grounding info — always rendered when apiDetail exists */}
+        {apiDetail && (() => {
+          const gStatus = deriveGroundingStatus(
+            apiDetail.grounding_score,
+            apiDetail.grounding_warnings,
+          );
+          const nonSystemWarnings = (apiDetail.grounding_warnings ?? []).filter(
+            (w) => !(typeof w === "object" && (w as GroundingWarningItem).type === "SYSTEM_ERROR"),
+          );
+          const warningSummary = buildWarningSummary(nonSystemWarnings);
+
+          const badgeClass =
+            gStatus === "passed"
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : gStatus === "warnings"
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : gStatus === "failed"
+                  ? "bg-red-50 text-red-700 border-red-200"
+                  : "bg-slate-100 text-slate-500 border-slate-200";
+
+          const badgeLabel =
+            gStatus === "passed"
+              ? "✅ Passed"
+              : gStatus === "warnings"
+                ? "⚠ Warnings Found"
+                : gStatus === "failed"
+                  ? "✗ Failed"
+                  : "⊘ Not Executed";
+
+          return (
+            <section className="rounded-md p-3 border border-slate-200 bg-slate-50/80 text-xs text-slate-700">
+              {/* Header row */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-semibold text-slate-800">Grounding Check</div>
+                <div className="flex items-center gap-2">
+                  {gStatus === "passed" && (
+                    <span className="text-slate-500">100%</span>
+                  )}
+                  {gStatus === "warnings" && apiDetail.grounding_score != null && (
+                    <span className="text-slate-500">
+                      {Math.round(apiDetail.grounding_score * 100)}%
+                    </span>
+                  )}
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${badgeClass}`}
+                  >
+                    {badgeLabel}
+                  </span>
+                </div>
+              </div>
+
+              {/* Passed */}
+              {gStatus === "passed" && (
+                <div className="space-y-1.5">
+                  <div className="text-slate-500 font-medium">Why it passed</div>
+                  <ul className="space-y-0.5 text-slate-600">
+                    <li>• No unsupported or unverifiable claims were detected.</li>
+                    <li>• The response is consistent with the complaint context.</li>
+                    <li>• No RBI compliance issues were found.</li>
+                    <li>• The AI did not exceed its authority or make unsupported commitments.</li>
+                  </ul>
+                </div>
               )}
-          </section>
-        )}
+
+              {/* Warnings Found */}
+              {gStatus === "warnings" && (
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-slate-500 font-medium mb-1">
+                      Why it needs verification
+                    </div>
+                    <ul className="space-y-0.5 text-slate-600">
+                      {warningSummary.map((line, i) => (
+                        <li key={i}>• {line}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  {nonSystemWarnings.length > 0 && (
+                    <div>
+                      <div className="text-slate-500 font-medium mb-1">Details</div>
+                      <ul className="space-y-1">
+                        {nonSystemWarnings.map((w, i) => (
+                          <GroundingWarningRow key={i} w={w} />
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Skipped */}
+              {gStatus === "skipped" && (
+                <div className="space-y-1.5">
+                  <div className="text-slate-500 font-medium">Why it was skipped</div>
+                  <p className="text-slate-600">
+                    {apiDetail.is_duplicate === true
+                      ? "Duplicate complaint detected. The pipeline ended before the grounding stage. No AI response was generated for validation."
+                      : "The complaint was escalated or terminated before a draft response was generated."}
+                  </p>
+                </div>
+              )}
+
+              {/* Failed */}
+              {gStatus === "failed" && (
+                <div className="space-y-1.5">
+                  <div className="text-slate-500 font-medium">Why it failed</div>
+                  <ul className="space-y-0.5 text-slate-600">
+                    <li>• The grounding service encountered an internal error.</li>
+                    <li>• The AI response could not be validated.</li>
+                    <li>• The complaint has been routed for human review.</li>
+                  </ul>
+                </div>
+              )}
+            </section>
+          );
+        })()}
 
         {/* Communication history */}
         {complaint.history.length > 0 && (
