@@ -11,7 +11,68 @@ export type TabId =
   | "analytics-root-cause"
   | "rbi"
   | "sla"
-  | "kb";
+  | "kb"
+  | "customers";
+
+// ── 360° Customer View types ──────────────────────────────────────────────────
+export interface CustomerCard {
+  cif_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  account_number: string | null;
+  verified: boolean;
+  customer_since: string | null;
+  total_complaints: number;
+  active_complaints: number;
+  resolved_complaints: number;
+  merged_complaints: number;
+  last_complaint_date: string | null;
+  last_complaint_status: string | null;
+}
+
+export interface CustomerListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  customers: CustomerCard[];
+}
+
+export interface CustomerSummary {
+  cif_id: string;
+  summary_text: string | null;
+  complaint_count: number;
+  last_updated: string | null;
+}
+
+export interface CustomerDetail {
+  profile: {
+    cif_id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    account_number: string | null;
+    verified: boolean;
+    customer_since: string | null;
+  };
+  stats: {
+    total_complaints: number;
+    active_complaints: number;
+    resolved_complaints: number;
+    merged_complaints: number;
+    last_complaint_date: string | null;
+    last_complaint_status: string | null;
+    avg_resolution_days: number | null;
+  };
+  complaints: Record<string, unknown>[];
+  category_breakdown: { category: string; count: number }[];
+  sentiment_trend: { date: string; sentiment: string; complaint_id: string }[];
+  timeline_events: { event: string; complaint_id?: string; channel?: string; tier?: number; timestamp?: string }[];
+  replies: { complaint_id: string; channel?: string; reply: string; route?: string; timestamp?: string }[];
+  followups: { complaint_id: string; duplicate_of?: string; channel?: string; category?: string; timestamp?: string; status?: string }[];
+  notes: { complaint_id: string; type: string; content: unknown; timestamp?: string }[];
+  insights: string[];
+}
 
 // ── Frontend display types (also used for mock data) ─────────────────────────
 export type Severity = "Critical" | "High" | "Medium" | "Low";

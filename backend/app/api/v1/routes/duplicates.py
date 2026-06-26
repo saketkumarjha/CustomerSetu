@@ -9,6 +9,7 @@ import logging
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from app.db.supabase_client import get_supabase
+from app.services.duplicate_service import resolve_root_parent
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -59,13 +60,19 @@ def merge_complaints(body: MergeRequest):
                 detail="Different-CIF merge requires confirm-same-person on both complaints first.",
             )
 
+    # Always merge into the root parent — if primary_id is itself merged into
+    # another complaint, follow the chain so merged_into always points to the root.
+    root_primary = resolve_root_parent(body.primary_id)
+    if root_primary != body.primary_id:
+        logger.info("[DEDUP] primary %s is merged — redirecting merge target to root %s", body.primary_id, root_primary)
+
     supabase.table("complaints").update({
-        "merged_into":      body.primary_id,
+        "merged_into":      root_primary,
         "duplicate_status": "merged",
     }).eq("complaint_id", body.secondary_id).execute()
 
-    logger.info("[DEDUP] Merged %s into %s", body.secondary_id, body.primary_id)
-    return {"status": "merged", "primary_id": body.primary_id, "secondary_id": body.secondary_id}
+    logger.info("[DEDUP] Merged %s into %s (root: %s)", body.secondary_id, body.primary_id, root_primary)
+    return {"status": "merged", "primary_id": root_primary, "secondary_id": body.secondary_id}
 
 
 @router.post(
@@ -99,12 +106,12 @@ def confirm_same_person(complaint_id: str):
     for rel_id in related_ids:
         rel = supabase.table("complaints").select(
             "complaint_id, cif_id"
-        ).eq("complaint_id", str(rel_id)).execute()
+        ).eq("complaint_id", rel_id).execute()
 
         if rel.data and rel.data[0].get("cif_id") != own_cif:
             supabase.table("complaints").update({
                 "duplicate_status": "confirmed_duplicate"
-            }).eq("complaint_id", str(rel_id)).execute()
+            }).eq("complaint_id", rel_id).execute()
 
     logger.info("[DEDUP] confirm-same-person: %s and related %s", complaint_id, related_ids)
     return {"status": "confirmed", "complaint_id": complaint_id}

@@ -1,12 +1,12 @@
+import threading
 from supabase import create_client, Client
 from app.core.config import get_settings
 
-_client: Client | None = None
+_local = threading.local()
 
 
 def get_supabase() -> Client:
-    global _client
-    if _client is None:
+    if not hasattr(_local, "client"):
         settings = get_settings()
-        _client = create_client(settings.supabase_url, settings.supabase_key)
-    return _client
+        _local.client = create_client(settings.supabase_url, settings.supabase_key)
+    return _local.client

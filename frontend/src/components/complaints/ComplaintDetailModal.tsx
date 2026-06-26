@@ -2,6 +2,7 @@
 import {
   X,
   Bot,
+  BookOpen,
   ChevronDown,
   ChevronUp,
   User,
@@ -9,14 +10,13 @@ import {
   CheckCircle2,
   Clock,
   Shield,
-  AlertTriangle,
   TrendingUp,
   Activity,
   Layers,
   Info,
 } from "lucide-react";
 import type { Complaint } from "../../types";
-import type { ApiComplaint, AgentDecision } from "../../lib/api";
+import type { ApiComplaint, AgentDecision, GroundingWarningItem } from "../../lib/api";
 import { SeverityBadge } from "../ui/SeverityBadge";
 import { ChannelBadge } from "../ui/ChannelBadge";
 import { StatusBadge } from "../ui/StatusBadge";
@@ -24,6 +24,8 @@ import { SlaBadge } from "../ui/SlaBadge";
 import { api } from "../../lib/api";
 import { EscalationStatusSection } from "./detail/EscalationStatusSection";
 import { ShadowOverrideSection } from "./detail/ShadowOverrideSection";
+import { DuplicateBanner } from "./DuplicateBanner";
+import { CustomerSummaryCard } from "../customers/CustomerSummaryCard";
 
 interface Props {
   complaint: Complaint;
@@ -115,6 +117,55 @@ function ConfBar({ value }: { value: number | null | undefined }) {
       </span>
     </div>
   );
+}
+
+// ── Grounding helpers ─────────────────────────────────────────────────────────
+
+function GroundingWarningRow({ w }: { w: string | GroundingWarningItem }) {
+  if (typeof w === "string") return <li className="text-slate-600">{w}</li>;
+  const title = [w.type, w.claim].filter(Boolean).join(" — ");
+  return (
+    <li className="text-slate-600 border-l-2 border-amber-400/70 pl-2 py-1.5 space-y-0.5">
+      {title && <div className="font-medium text-slate-800">{title}</div>}
+      {w.issue && <div><span className="text-slate-400">Issue: </span>{w.issue}</div>}
+      {w.suggestion && <div className="text-slate-500"><span className="text-slate-400">Suggestion: </span>{w.suggestion}</div>}
+    </li>
+  );
+}
+
+type GroundingStatus = "skipped" | "passed" | "warnings" | "failed";
+
+function deriveGroundingStatus(
+  score: number | null | undefined,
+  warnings: (string | GroundingWarningItem)[] | undefined,
+): GroundingStatus {
+  if (score === null || score === undefined) return "skipped";
+  if (
+    score === 0.0 &&
+    (warnings ?? []).some(
+      (w) => typeof w === "object" && (w as GroundingWarningItem).type === "SYSTEM_ERROR",
+    )
+  ) return "failed";
+  if ((warnings ?? []).length > 0) return "warnings";
+  return "passed";
+}
+
+function buildWarningSummary(warnings: (string | GroundingWarningItem)[]): string[] {
+  const counts: Record<string, number> = {};
+  for (const w of warnings) {
+    if (typeof w === "object" && (w as GroundingWarningItem).type) {
+      const t = (w as GroundingWarningItem).type!;
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+  }
+  const lines: string[] = [];
+  if (counts["UNVERIFIABLE_CLAIM"])
+    lines.push(`${counts["UNVERIFIABLE_CLAIM"]} unsupported claim${counts["UNVERIFIABLE_CLAIM"] > 1 ? "s" : ""} detected.`);
+  if (counts["RBI_COMPLIANCE"])
+    lines.push(`${counts["RBI_COMPLIANCE"]} RBI compliance issue${counts["RBI_COMPLIANCE"] > 1 ? "s" : ""} found.`);
+  if (counts["AUTHORITY_EXCEEDED"])
+    lines.push(`${counts["AUTHORITY_EXCEEDED"]} authority violation${counts["AUTHORITY_EXCEEDED"] > 1 ? "s" : ""} detected.`);
+  return lines;
 }
 
 /** Route status pill */
@@ -225,11 +276,12 @@ export function ComplaintDetailModal({
   apiDetail,
   loadingDetail,
   onClose,
-  onComplaintUpdated: _onComplaintUpdated,
+  onComplaintUpdated,
 }: Props) {
   const [agentDecisions, setAgentDecisions] = useState<AgentDecision[]>([]);
   const [showDecisions, setShowDecisions] = useState(false);
   const [showRawFields, setShowRawFields] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     setAgentDecisions([]);
@@ -262,6 +314,7 @@ export function ComplaintDetailModal({
     ? Object.entries(apiDetail).filter(([k, v]) => {
         if (k === "embedding") return false;
         if (typeof v === "object" && v !== null) return false;
+        if (v === null || v === undefined || v === "") return false;
         return true;
       })
     : [];
@@ -322,7 +375,7 @@ export function ComplaintDetailModal({
         {/* ── Body ── */}
         <div className="overflow-y-auto flex-1 p-4 sm:p-5 space-y-4">
           {/* Row 1: Customer + Complaint text */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Customer card */}
             <Card>
               <CardHeader icon={<User size={12} />} title="Customer" />
@@ -372,21 +425,46 @@ export function ComplaintDetailModal({
                   </div>
                 )}
 
-                {/* Duplicate warning */}
-                {apiDetail?.is_duplicate && (
-                  <div className="flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-2.5 py-2">
-                    <AlertTriangle size={11} className="flex-shrink-0 mt-0.5" />
-                    <span>
-                      Possible duplicate of{" "}
-                      {apiDetail.duplicate_of ?? "another complaint"}
-                    </span>
+                {/* Customer History — collapsible, inside Customer card */}
+                {apiDetail?.cif_id && (
+                  <div className="border border-slate-100 rounded-xl overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between px-3 py-2 bg-slate-50 hover:bg-slate-100 text-xs font-semibold text-slate-600 transition-colors"
+                      onClick={() => setShowHistory(h => !h)}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <BookOpen size={11} className="text-ub-blue" />
+                        Customer History
+                      </span>
+                      {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                    </button>
+                    {showHistory && (
+                      <div className="p-3">
+                        <CustomerSummaryCard cifId={apiDetail.cif_id} />
+                      </div>
+                    )}
                   </div>
+                )}
+
+                {/* Duplicate banner with merge/confirm actions */}
+                {apiDetail?.duplicate_status &&
+                  apiDetail.duplicate_status !== 'merged' &&
+                  (apiDetail.duplicate_of?.length ?? 0) > 0 && (
+                  <DuplicateBanner
+                    complaintId={apiDetail.complaint_id}
+                    duplicateStatus={apiDetail.duplicate_status}
+                    duplicateOf={apiDetail.duplicate_of ?? []}
+                    ownCifId={apiDetail.cif_id}
+                    ownChannel={apiDetail.channel}
+                    ownText={apiDetail.masked_text ?? apiDetail.original_text}
+                    onActionComplete={() => onComplaintUpdated?.()}
+                  />
                 )}
               </div>
             </Card>
 
             {/* Complaint text */}
-            <Card className="lg:col-span-2">
+            <Card>
               <CardHeader
                 icon={<FileText size={12} />}
                 title="Complaint Text"
@@ -418,7 +496,7 @@ export function ComplaintDetailModal({
               apiDetail.shadow_overridden) && (
               <ShadowOverrideSection
                 apiDetail={apiDetail}
-                onApplied={() => _onComplaintUpdated?.()}
+                onApplied={() => onComplaintUpdated?.()}
               />
             )}
 
@@ -448,49 +526,44 @@ export function ComplaintDetailModal({
                   <div className="space-y-4">
                     {/* Scores grid */}
                     <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                      <Cell label="Category">
-                        <Val v={apiDetail?.category ?? complaint.category} />
-                      </Cell>
-                      <Cell label="Sentiment">
-                        <Val v={apiDetail?.sentiment ?? complaint.sentiment} />
-                      </Cell>
-                      <Cell label="Urgency">
-                        <Val
-                          v={
-                            apiDetail?.urgency_score != null
-                              ? `${apiDetail.urgency_score}/10`
-                              : null
-                          }
-                        />
-                      </Cell>
-                      <Cell label="Severity">
-                        <Val
-                          v={
-                            apiDetail?.severity != null
-                              ? `${apiDetail.severity}/5`
-                              : null
-                          }
-                        />
-                      </Cell>
-                      <Cell label="Confidence" wide>
-                        <ConfBar value={apiDetail?.confidence_score} />
-                      </Cell>
-                      <Cell label="Grounding">
-                        <ConfBar value={apiDetail?.grounding_score} />
-                      </Cell>
-                      <Cell label="Risk Score">
-                        <ConfBar value={apiDetail?.risk_score} />
-                      </Cell>
-                      <Cell label="Route">
-                        {apiDetail?.route ? (
+                      {(apiDetail?.category ?? complaint.category) && (
+                        <Cell label="Category">
+                          <Val v={apiDetail?.category ?? complaint.category} />
+                        </Cell>
+                      )}
+                      {(apiDetail?.sentiment ?? complaint.sentiment) && (
+                        <Cell label="Sentiment">
+                          <Val v={apiDetail?.sentiment ?? complaint.sentiment} />
+                        </Cell>
+                      )}
+                      {apiDetail?.urgency_score != null && (
+                        <Cell label="Urgency">
+                          <Val v={`${apiDetail.urgency_score}/10`} />
+                        </Cell>
+                      )}
+                      {apiDetail?.severity != null && (
+                        <Cell label="Severity">
+                          <Val v={`${apiDetail.severity}/5`} />
+                        </Cell>
+                      )}
+                      {apiDetail?.confidence_score != null && (
+                        <Cell label="Confidence" wide>
+                          <ConfBar value={apiDetail.confidence_score} />
+                        </Cell>
+                      )}
+                      {apiDetail?.risk_score != null && (
+                        <Cell label="Risk Score">
+                          <ConfBar value={apiDetail.risk_score} />
+                        </Cell>
+                      )}
+                      {apiDetail?.route && (
+                        <Cell label="Route">
                           <RouteStatusPill
                             route={apiDetail.route}
                             status={apiDetail.status}
                           />
-                        ) : (
-                          <Val v={null} />
-                        )}
-                      </Cell>
+                        </Cell>
+                      )}
                     </div>
 
                     {/* Compliance */}
@@ -552,6 +625,7 @@ export function ComplaintDetailModal({
                           </ol>
                         </div>
                       )}
+
                   </div>
                 )}
               </div>
@@ -609,6 +683,88 @@ export function ComplaintDetailModal({
               </div>
             </Card>
           </div>
+
+          {/* Grounding Check */}
+          {apiDetail && (() => {
+            const gStatus = deriveGroundingStatus(
+              apiDetail.grounding_score,
+              apiDetail.grounding_warnings,
+            );
+            const nonSystemWarnings = (apiDetail.grounding_warnings ?? []).filter(
+              (w) => !(typeof w === "object" && (w as GroundingWarningItem).type === "SYSTEM_ERROR"),
+            );
+            const warningSummary = buildWarningSummary(nonSystemWarnings);
+            const badgeClass =
+              gStatus === "passed"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : gStatus === "warnings"
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : gStatus === "failed"
+                    ? "bg-red-50 text-red-700 border-red-200"
+                    : "bg-slate-100 text-slate-500 border-slate-200";
+            const badgeLabel =
+              gStatus === "passed"
+                ? "✅ Passed"
+                : gStatus === "warnings"
+                  ? "⚠ Warnings Found"
+                  : gStatus === "failed"
+                    ? "✗ Failed"
+                    : "⊘ Not Executed";
+            return (
+              <Card>
+                <CardHeader icon={<Shield size={12} />} title="Grounding Check"
+                  right={
+                    <div className="flex items-center gap-2">
+                      {gStatus === "warnings" && apiDetail.grounding_score != null && (
+                        <span className="text-xs text-slate-500">
+                          {Math.round(apiDetail.grounding_score * 100)}%
+                        </span>
+                      )}
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${badgeClass}`}>
+                        {badgeLabel}
+                      </span>
+                    </div>
+                  }
+                />
+                <div className="p-4 text-xs text-slate-700 space-y-2">
+                  {gStatus === "passed" && (
+                    <ul className="space-y-1 text-slate-600">
+                      <li>• No unsupported or unverifiable claims were detected.</li>
+                      <li>• The response is consistent with the complaint context.</li>
+                      <li>• No RBI compliance issues were found.</li>
+                      <li>• The AI did not exceed its authority or make unsupported commitments.</li>
+                    </ul>
+                  )}
+                  {gStatus === "warnings" && (
+                    <div className="space-y-2">
+                      <ul className="space-y-0.5 text-slate-600">
+                        {warningSummary.map((line, i) => <li key={i}>• {line}</li>)}
+                      </ul>
+                      {nonSystemWarnings.length > 0 && (
+                        <ul className="space-y-1">
+                          {nonSystemWarnings.map((w, i) => <GroundingWarningRow key={i} w={w} />)}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  {gStatus === "skipped" && (
+                    <p className="text-slate-600">
+                      {apiDetail.is_duplicate === true
+                        ? "Duplicate complaint detected. The pipeline ended before the grounding stage. No AI response was generated for validation."
+                        : "The complaint was escalated or terminated before a draft response was generated."}
+                    </p>
+                  )}
+                  {gStatus === "failed" && (
+                    <ul className="space-y-1 text-slate-600">
+                      <li>• The grounding service encountered an internal error.</li>
+                      <li>• The AI response could not be validated.</li>
+                      <li>• The complaint has been routed for human review.</li>
+                    </ul>
+                  )}
+                </div>
+              </Card>
+            );
+          })()}
 
           {/* Agent Decisions Trace */}
           {agentDecisions.length > 0 && (

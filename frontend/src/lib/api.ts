@@ -481,6 +481,21 @@ export const api = {
       return apiGet<IncidentAlertsResponse>(`/api/v1/clusters/alerts?${qs}`);
     },
   },
+  customers: {
+    list: (params?: { page?: number; page_size?: number; search?: string; status?: string; channel?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("page", String(params?.page ?? 1));
+      qs.set("page_size", String(params?.page_size ?? 12));
+      if (params?.search) qs.set("search", params.search);
+      if (params?.status) qs.set("status", params.status);
+      if (params?.channel) qs.set("channel", params.channel);
+      return apiGet<import("../types").CustomerListResponse>(`/api/v1/customers?${qs}`);
+    },
+    get: (cifId: string) =>
+      apiGet<import("../types").CustomerDetail>(`/api/v1/customers/${encodeURIComponent(cifId)}`),
+    getSummary: (cifId: string) =>
+      apiGet<import("../types").CustomerSummary>(`/api/v1/customers/${encodeURIComponent(cifId)}/summary`),
+  },
 };
 
 // ── Incident alert types (Predictive Complaint Intelligence) ─────────────────

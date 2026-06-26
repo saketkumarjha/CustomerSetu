@@ -4,12 +4,15 @@ import type { Complaint } from "../../types";
 import { StatusBadge } from "../ui/StatusBadge";
 import { ChannelBadge } from "../ui/ChannelBadge";
 import { SlaBadge } from "../ui/SlaBadge";
+import { CustomerSummaryCard } from "../customers/CustomerSummaryCard";
 
 interface Props {
   complaints: Complaint[];
   selected: Complaint | null;
   onSelect: (c: Complaint) => void;
   mergedChildrenMap?: Map<string, Complaint[]>;
+  loading?: boolean;
+  cifIdMap?: Map<string, string>;
 }
 
 const HEADERS = [
@@ -20,6 +23,7 @@ const HEADERS = [
   "Category / Type",
   "Status",
   "SLA",
+  "History",
   "",        // duplicate flag / actions
 ];
 
@@ -137,7 +141,7 @@ function MergedChildrenPanel({ mergedItems, isExpanded, onSelect }: MergedChildr
   );
 }
 
-export function ComplaintsTable({ complaints, selected, onSelect, mergedChildrenMap = new Map() }: Props) {
+export function ComplaintsTable({ complaints, selected, onSelect, mergedChildrenMap = new Map(), loading = false, cifIdMap }: Props) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const toggleExpand = (id: string) => {
@@ -165,7 +169,20 @@ export function ComplaintsTable({ complaints, selected, onSelect, mergedChildren
             </tr>
           </thead>
           <tbody>
-            {complaints.map((c) => {
+            {loading && Array.from({ length: 6 }).map((_, i) => (
+              <tr key={i} className="border-b border-gray-50">
+                <td className="w-8 px-2 py-3"><div className="w-4 h-3 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3"><div className="w-28 h-3 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3"><div className="w-24 h-3 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3"><div className="w-16 h-5 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3"><div className="w-32 h-3 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3"><div className="w-16 h-5 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3"><div className="w-20 h-3 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3"><div className="w-32 h-3 bg-gray-200 rounded animate-pulse" /></td>
+                <td className="px-4 py-3" />
+              </tr>
+            ))}
+            {!loading && complaints.map((c) => {
               const isSelected = selected?.id === c.id;
               const isPending = c.category === "Analysing…";
               const mergedChildren = mergedChildrenMap.get(c.id) ?? [];
@@ -243,11 +260,16 @@ export function ComplaintsTable({ complaints, selected, onSelect, mergedChildren
                       <SlaBadge breached={c.slaBreached} label={c.slaRemaining} />
                     </td>
 
+                    {/* Customer History summary */}
+                    <td className="px-3 py-2 max-w-[192px]">
+                      <CustomerSummaryCard cifId={cifIdMap?.get(c.id)} compact />
+                    </td>
+
                     {/* Duplicate flag */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       {c.duplicateStatus && c.duplicateStatus !== 'merged' && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
-                          Duplicate?
+                          Duplicate
                         </span>
                       )}
                     </td>
@@ -271,7 +293,7 @@ export function ComplaintsTable({ complaints, selected, onSelect, mergedChildren
           </tbody>
         </table>
 
-        {complaints.length === 0 && (
+        {!loading && complaints.length === 0 && (
           <div className="text-center py-16 text-gray-400">
             <div className="text-sm">
               No complaints match the current filters.

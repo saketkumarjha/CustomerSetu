@@ -78,8 +78,10 @@ async def run_pipeline(initial_state: PipelineState) -> None:
         await build_clusters()
 
         # ── Cross-channel duplicate detection ─────────────────────────────────
+        # Run in a thread — detect_duplicate_complaints is sync and makes several
+        # blocking DB calls that would stall the async event loop if called directly.
         try:
-            detect_cross_channel_duplicates(complaint_id)
+            await asyncio.to_thread(detect_cross_channel_duplicates, complaint_id)
         except Exception as dedup_exc:
             logger.warning("[DEDUP] Detection failed for %s: %s", complaint_id, dedup_exc)
 
@@ -266,7 +268,13 @@ async def _save_pipeline_outputs(complaint_id: str, state: PipelineState) -> Non
         "language":                 state.get("language"),
         # ── Duplicate detection ───────────────────────────────────────────────
         "is_duplicate":             state.get("is_duplicate", False),
-        # duplicate_of (uuid[]) is owned by duplicate_service.py — not written here
+        # Write the pipeline's known match directly so duplicate_of (text[], not uuid[]) is
+        # populated even when detect_duplicate_complaints later finds no pgvector
+        # matches (e.g. original complaint has no stored embedding from an older run).
+        **({
+            "duplicate_of":     [state["duplicate_of"]],
+            "duplicate_status": "possible_duplicate",
+        } if state.get("is_duplicate") and state.get("duplicate_of") else {}),
         # ── Classification ────────────────────────────────────────────────────
         "category":                 state.get("category"),
         "category_confidence":      state.get("category_confidence"),

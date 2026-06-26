@@ -542,6 +542,16 @@ async def _wa_general_query(customer_number: str, message_text: str) -> None:
     complaint_id = save_whatsapp_complaint(customer_number, message_text, tier=0)
     _wa_logger.info("[WHATSAPP] General query registered %s for %s", complaint_id, customer_number)
 
+    # Silently link CIF for registered customers even on tier-0 path.
+    try:
+        from app.services.identity_service import normalize_phone, resolve_identity, link_complaint_to_cif
+        _phone = normalize_phone(customer_number)
+        _id_result = await _asyncio.to_thread(resolve_identity, "whatsapp", _phone)
+        if _id_result["status"] in ("verified", "new") and _id_result.get("cif_id"):
+            await _asyncio.to_thread(link_complaint_to_cif, complaint_id, _id_result["cif_id"], set_pending=False)
+    except Exception as _id_exc:
+        _wa_logger.warning("[WHATSAPP] CIF link skipped for %s (%s): %s", complaint_id, customer_number, _id_exc)
+
     _ref_suffix = f"\n\n📋 Reference: *{complaint_id}*\nQuote this for any follow-up."
     fallback = (
         "Thank you for contacting Union Bank of India. "
@@ -589,31 +599,100 @@ async def _wa_general_query(customer_number: str, message_text: str) -> None:
             pass
 
 
+def _find_pending_complaint(customer_id: str) -> dict | None:
+    """Return the most recent provisional complaint awaiting identity info, or None."""
+    supabase = get_supabase()
+    resp = (
+        supabase.table("complaints")
+        .select("complaint_id, linked_complaint_ids")
+        .eq("customer_id", customer_id)
+        .eq("pending_info_request", True)
+        .eq("identity_status", "provisional")
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = resp.data or []
+    return rows[0] if rows else None
+
+
 async def _wa_branch_query(customer_number: str, message_text: str, tier: int) -> None:
-    """Register complaint, send ACK, run pipeline (if auto-mode enabled)."""
+    """Register complaint with provisional state; resolve identity; trigger pipeline only when verified."""
     from app.services.whatsapp_service import save_whatsapp_complaint, send_whatsapp_reply
+    from app.services.identity_service import (
+        normalize_phone, extract_account_number, resolve_identity, link_complaint_to_cif,
+    )
     from app.api.v1.routes.settings import is_auto_pipeline_enabled
+
+    phone = normalize_phone(customer_number)
+    account_number = extract_account_number(message_text)
+
+    # ── Resume flow: customer replying with account number to a pending complaint ──
+    pending = await _asyncio.to_thread(_find_pending_complaint, customer_number)
+    if pending and account_number:
+        complaint_id = pending["complaint_id"]
+        result = await _asyncio.to_thread(resolve_identity, "whatsapp", phone, account_number)
+        if result["status"] == "verified":
+            await _asyncio.to_thread(link_complaint_to_cif, complaint_id, result["cif_id"])
+            send_whatsapp_reply(
+                customer_number,
+                f"✅ Identity verified. Your complaint *{complaint_id}* is now being processed.\n"
+                f"You will receive a reply once our team resolves it.",
+            )
+            if is_auto_pipeline_enabled():
+                await _trigger_pipeline_bg(complaint_id)
+        else:
+            # Number still not found — ask to re-send from registered number.
+            send_whatsapp_reply(
+                customer_number,
+                f"❌ We could not verify your identity for complaint *{complaint_id}*.\n"
+                f"Please re-send your complaint from your *registered WhatsApp number*.\n\n"
+                f"To update your registered number, call 1800-22-2244 or visit your nearest branch.",
+            )
+        return
+
+    # ── New complaint ─────────────────────────────────────────────────────────────
     try:
         complaint_id = save_whatsapp_complaint(customer_number, message_text, tier)
+
+        result = await _asyncio.to_thread(resolve_identity, "whatsapp", phone, account_number)
 
         tier_labels = {
             1: "Branch Level", 2: "Zonal Level", 3: "Regional Level",
             4: "Head Office", 5: "RBI Ombudsman",
         }
-        ack = (
-            f"✅ Your complaint has been registered.\n"
-            f"Reference: *{complaint_id}*\n"
-            f"Level: {tier_labels.get(tier, f'Tier {tier}')}\n\n"
-            f"Our team will review and respond within the SLA window. "
-            f"You will receive a reply on this WhatsApp number once resolved."
-        )
-        send_whatsapp_reply(customer_number, ack)
 
-        # Run full AI pipeline only when auto-mode is enabled
-        if is_auto_pipeline_enabled():
-            await _trigger_pipeline_bg(complaint_id)
+        if result["status"] in ("verified", "new"):
+            try:
+                await _asyncio.to_thread(link_complaint_to_cif, complaint_id, result["cif_id"])
+            except Exception as _cif_exc:
+                _wa_logger.error(
+                    "[WHATSAPP] link_complaint_to_cif FAILED for %s (cif=%s): %s",
+                    complaint_id, result["cif_id"], _cif_exc, exc_info=True,
+                )
+            ack = (
+                f"✅ Your complaint has been registered.\n"
+                f"Reference: *{complaint_id}*\n"
+                f"Level: {tier_labels.get(tier, f'Tier {tier}')}\n\n"
+                f"Our team will review and respond within the SLA window. "
+                f"You will receive a reply on this WhatsApp number once resolved."
+            )
+            send_whatsapp_reply(customer_number, ack)
+            if is_auto_pipeline_enabled():
+                await _trigger_pipeline_bg(complaint_id)
+            else:
+                _wa_logger.info("[WHATSAPP] Auto-pipeline OFF — %s queued for manual processing", complaint_id)
         else:
-            _wa_logger.info("[WHATSAPP] Auto-pipeline OFF — %s queued for manual processing", complaint_id)
+            # WhatsApp number not in our customer records — ask to re-send from registered number.
+            # The phone number itself is the identity anchor; if unknown we cannot link the complaint.
+            send_whatsapp_reply(
+                customer_number,
+                f"✅ We received your complaint (Ref: *{complaint_id}*).\n\n"
+                f"However, this WhatsApp number is not registered with Union Bank of India. "
+                f"Please re-send your complaint from your *registered WhatsApp number*.\n\n"
+                f"To update your registered number, call 1800-22-2244 or visit your nearest branch.",
+            )
+            _wa_logger.info("[WHATSAPP] Unregistered number %s — asked to re-send from registered number", customer_number)
 
     except Exception as exc:
         _wa_logger.exception("[WHATSAPP] Branch query failed: %s", exc)
@@ -621,7 +700,7 @@ async def _wa_branch_query(customer_number: str, message_text: str, tier: int) -
         send_whatsapp_reply(
             customer_number,
             "We received your message but encountered an issue registering it. "
-            "Please call 1800-22-2244 or visit your nearest branch."
+            "Please call 1800-22-2244 or visit your nearest branch.",
         )
 
 
@@ -693,6 +772,16 @@ async def _email_general_query(
         attachment_url=attachment_url,
     )
     _email_logger.info("[EMAIL] General query registered %s for %s", complaint_id, customer_email)
+
+    # Silently link CIF for registered customers even on tier-0 path.
+    # No pipeline trigger — just ensures cif_id is never null for known customers.
+    try:
+        from app.services.identity_service import resolve_identity, link_complaint_to_cif
+        _id_result = await _asyncio.to_thread(resolve_identity, "email", customer_email)
+        if _id_result["status"] in ("verified", "new") and _id_result.get("cif_id"):
+            await _asyncio.to_thread(link_complaint_to_cif, complaint_id, _id_result["cif_id"], set_pending=False)
+    except Exception as _id_exc:
+        _email_logger.warning("[EMAIL] CIF link skipped for %s (%s): %s", complaint_id, customer_email, _id_exc)
 
     _ref_footer = (
         f"\n\n---\n"
@@ -781,17 +870,62 @@ async def _email_branch_query(
     tier: int,
     attachment_url: _Optional[str] = None,
 ) -> None:
-    """Register email complaint, send ACK email, run full AI pipeline (if auto-mode enabled)."""
+    """Register email complaint with provisional state; resolve identity; trigger pipeline only when verified."""
     from app.services.email_service import save_email_complaint, send_email_reply
+    from app.services.identity_service import (
+        extract_account_number, resolve_identity, link_complaint_to_cif,
+    )
     from app.api.v1.routes.settings import is_auto_pipeline_enabled
 
     full_text = f"Subject: {subject}\n\n{message_text}" if subject else message_text
+    account_number = extract_account_number(full_text)
 
+    # ── Resume flow: customer replying with account number to a pending complaint ──
+    pending = await _asyncio.to_thread(_find_pending_complaint, customer_email)
+    if pending and account_number:
+        complaint_id = pending["complaint_id"]
+        result = await _asyncio.to_thread(resolve_identity, "email", customer_email, account_number)
+        if result["status"] == "verified":
+            await _asyncio.to_thread(link_complaint_to_cif, complaint_id, result["cif_id"])
+            resume_body = (
+                f"Dear Customer,\n\n"
+                f"Your identity has been verified. Your complaint *{complaint_id}* is now being processed.\n"
+                f"You will receive a reply once our team resolves it.\n\n"
+                f"For urgent queries, call 1800-22-2244.\n\n"
+                f"Regards,\nUnion Bank of India Customer Care"
+            )
+            await _asyncio.to_thread(
+                send_email_reply,
+                customer_email,
+                f"Identity Verified — Complaint {complaint_id} Processing",
+                resume_body,
+            )
+            if is_auto_pipeline_enabled():
+                await _trigger_pipeline_bg(complaint_id)
+        else:
+            # Email still not found — ask to re-file from the registered address.
+            unreg_body = (
+                f"Dear Customer,\n\n"
+                f"We were unable to verify your identity for complaint {complaint_id}.\n"
+                f"Please write to us from the email address registered with your Union Bank account.\n\n"
+                f"To update your registered email, visit your nearest branch or call 1800-22-2244.\n\n"
+                f"Regards,\nUnion Bank of India Customer Care"
+            )
+            await _asyncio.to_thread(
+                send_email_reply,
+                customer_email,
+                f"Action Required: Please Write from Your Registered Email",
+                unreg_body,
+            )
+        return
+
+    # ── New complaint ─────────────────────────────────────────────────────────────
     try:
         complaint_id = await _asyncio.to_thread(
             save_email_complaint, customer_email, subject, full_text, tier,
             attachment_url=attachment_url,
         )
+        result = await _asyncio.to_thread(resolve_identity, "email", customer_email, account_number)
 
         tier_labels = {
             1: "Branch Level", 2: "Zonal Level", 3: "Regional Level",
@@ -799,26 +933,53 @@ async def _email_branch_query(
         }
         tier_label = tier_labels.get(tier, f"Tier {tier}")
 
-        ack_body = (
-            f"Dear Customer,\n\n"
-            f"Your complaint has been registered successfully.\n\n"
-            f"Reference Number: {complaint_id}\n"
-            f"Level: {tier_label}\n\n"
-            f"Our team will review and respond within the SLA window.\n"
-            f"You will receive a reply on this email address once resolved.\n\n"
-            f"For urgent queries, call 1800-22-2244.\n\n"
-            f"Regards,\nUnion Bank of India Customer Care"
-        )
-        await _asyncio.to_thread(
-            send_email_reply, customer_email, f"Complaint Registered: {complaint_id}", ack_body
-        )
-        _email_logger.info("[EMAIL] ACK sent for %s to %s", complaint_id, customer_email)
-
-        # Run full AI pipeline only when auto-mode is enabled
-        if is_auto_pipeline_enabled():
-            await _trigger_pipeline_bg(complaint_id)
+        if result["status"] in ("verified", "new"):
+            try:
+                await _asyncio.to_thread(link_complaint_to_cif, complaint_id, result["cif_id"])
+            except Exception as _cif_exc:
+                _email_logger.error(
+                    "[EMAIL] link_complaint_to_cif FAILED for %s (cif=%s): %s",
+                    complaint_id, result["cif_id"], _cif_exc, exc_info=True,
+                )
+            ack_body = (
+                f"Dear Customer,\n\n"
+                f"Your complaint has been registered successfully.\n\n"
+                f"Reference Number: {complaint_id}\n"
+                f"Level: {tier_label}\n\n"
+                f"Our team will review and respond within the SLA window.\n"
+                f"You will receive a reply on this email address once resolved.\n\n"
+                f"For urgent queries, call 1800-22-2244.\n\n"
+                f"Regards,\nUnion Bank of India Customer Care"
+            )
+            await _asyncio.to_thread(
+                send_email_reply, customer_email, f"Complaint Registered: {complaint_id}", ack_body
+            )
+            _email_logger.info("[EMAIL] ACK sent for %s to %s", complaint_id, customer_email)
+            if is_auto_pipeline_enabled():
+                await _trigger_pipeline_bg(complaint_id)
+            else:
+                _email_logger.info("[EMAIL] Auto-pipeline OFF — %s queued for manual processing", complaint_id)
         else:
-            _email_logger.info("[EMAIL] Auto-pipeline OFF — %s queued for manual processing", complaint_id)
+            # Email not in our customer records — ask to write from registered email.
+            # We do NOT ask for account number here: the email address itself is the
+            # identity anchor; if it's unknown we cannot safely link a complaint.
+            unreg_body = (
+                f"Dear Customer,\n\n"
+                f"We received your complaint (Reference: {complaint_id}) but your email address "
+                f"is not registered with Union Bank of India.\n\n"
+                f"To process your complaint, please write to us from the email address linked to "
+                f"your Union Bank account.\n\n"
+                f"To update your registered email, visit your nearest branch or call 1800-22-2244.\n\n"
+                f"For urgent queries, call 1800-22-2244.\n\n"
+                f"Regards,\nUnion Bank of India Customer Care"
+            )
+            await _asyncio.to_thread(
+                send_email_reply,
+                customer_email,
+                f"Action Required: Please Write from Your Registered Email",
+                unreg_body,
+            )
+            _email_logger.info("[EMAIL] Unregistered email %s — asked to re-file from registered email", customer_email)
 
     except Exception as exc:
         _email_logger.exception("[EMAIL] Branch query failed for %s: %s", customer_email, exc)

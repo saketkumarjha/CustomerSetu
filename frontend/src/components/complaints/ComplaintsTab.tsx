@@ -3,7 +3,7 @@ import { RefreshCw, WifiOff } from "lucide-react";
 import type { Complaint, Status, Severity, TabId } from "../../types";
 import { ComplaintsFilters } from "./ComplaintsFilters";
 import { ComplaintsTable } from "./ComplaintsTable";
-import { ComplaintDetailPanel } from "./detail/ComplaintDetailPanel";
+import { ComplaintDetailModal } from "./ComplaintDetailModal";
 import { api, type ApiComplaint } from "../../lib/api";
 import { useApiData } from "../../hooks/useApiData";
 import {
@@ -293,31 +293,29 @@ export function ComplaintsTab({
         </div>
       )}
 
-      {/* Table + side panel */}
+      {/* Table */}
       {!listError && (
-        <div className="flex flex-row gap-0 min-h-[60vh]">
-          <div className="flex-1 min-w-0">
-            <ComplaintsTable
-              complaints={filtered}
-              selected={enrichedSelected}
-              onSelect={handleSelect}
-              mergedChildrenMap={mergedChildrenMap}
-              loading={listLoading}
-              cifIdMap={cifIdMap}
-            />
-          </div>
-          {enrichedSelected && (
-            <ComplaintDetailPanel
-              complaint={enrichedSelected}
-              onClose={handleClose}
-              loadingDetail={loadingDetail}
-              apiDetail={apiComplaintDetail}
-              pipelineAvailable={usingApi}
-              onAfterRunPipeline={() => setActive?.("pipeline")}
-              onComplaintUpdated={onComplaintUpdated}
-            />
-          )}
-        </div>
+        <ComplaintsTable
+          complaints={filtered}
+          selected={enrichedSelected}
+          onSelect={handleSelect}
+          mergedChildrenMap={mergedChildrenMap}
+          loading={listLoading}
+          cifIdMap={cifIdMap}
+        />
+      )}
+
+      {/* Detail modal overlay */}
+      {enrichedSelected && (
+        <ComplaintDetailModal
+          complaint={enrichedSelected}
+          onClose={handleClose}
+          loadingDetail={loadingDetail}
+          apiDetail={apiComplaintDetail}
+          pipelineAvailable={usingApi}
+          onAfterRunPipeline={() => setActive?.("pipeline")}
+          onComplaintUpdated={onComplaintUpdated}
+        />
       )}
     </div>
   );

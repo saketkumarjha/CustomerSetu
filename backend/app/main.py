@@ -99,6 +99,15 @@ async def lifespan(app: FastAPI):
         max_instances=1,
         coalesce=True,
     )
+    from app.tasks.scheduled_jobs import refresh_dirty_cif_summaries
+    _scheduler.add_job(
+        refresh_dirty_cif_summaries,
+        "interval",
+        minutes=1,
+        id="refresh_cif_summaries",
+        max_instances=1,
+        coalesce=True,
+    )
     _scheduler.start()
     logger.info("[STARTUP] Cluster builder + incident scorer scheduler started (every 5 min)")
 

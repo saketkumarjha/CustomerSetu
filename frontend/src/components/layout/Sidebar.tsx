@@ -71,6 +71,7 @@ const TABS: NavItem[] = [
   { id: "rbi", icon: <Shield size={16} />, label: "RBI Compliance" },
   { id: "sla", icon: <Clock size={16} />, label: "SLA Tracker" },
   { id: "kb", icon: <BookOpen size={16} />, label: "KB Admin", badge: "ADMIN" },
+  { id: "customers", icon: <Users size={16} />, label: "360° Customer View" },
 ];
 
 const ANALYTICS_IDS: TabId[] = [

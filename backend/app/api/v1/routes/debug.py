@@ -5,11 +5,14 @@ Never expose in production (guarded by APP_ENV check).
 """
 
 import smtplib
+import logging
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 from fastapi import APIRouter, HTTPException, Query, status
 from app.core.config import get_settings
+
+_debug_logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -108,3 +111,65 @@ def send_test_email(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"SMTP error: {e}",
         )
+
+
+@router.post(
+    "/relink-cif-backfill",
+    summary="Backfill cif_id for email/WhatsApp complaints stuck at identity_status=provisional",
+    tags=["Debug"],
+)
+def relink_cif_backfill():
+    """
+    Scans complaints where identity_status='provisional', cif_id IS NULL, and
+    channel IN ('email', 'whatsapp'). For each, re-runs resolve_identity and
+    links the complaint to a CIF. Returns a summary of linked/skipped counts.
+    Dev only.
+    """
+    _require_dev()
+
+    from app.db.supabase_client import get_supabase
+    from app.services.identity_service import resolve_identity, link_complaint_to_cif, normalize_phone
+
+    supabase = get_supabase()
+
+    resp = (
+        supabase.table("complaints")
+        .select("complaint_id, customer_id, channel")
+        .eq("identity_status", "provisional")
+        .is_("cif_id", "null")
+        .in_("channel", ["email", "whatsapp"])
+        .execute()
+    )
+    candidates = resp.data or []
+
+    linked, skipped, errors = [], [], []
+
+    for row in candidates:
+        complaint_id = row["complaint_id"]
+        customer_id = row["customer_id"]
+        channel = row["channel"]
+
+        try:
+            if channel == "whatsapp":
+                identifier = normalize_phone(customer_id)
+            else:
+                identifier = customer_id
+
+            result = resolve_identity(channel, identifier)
+            if result.get("cif_id"):
+                link_complaint_to_cif(complaint_id, result["cif_id"], set_pending=False)
+                linked.append({"complaint_id": complaint_id, "cif_id": result["cif_id"], "status": result["status"]})
+                _debug_logger.info("[BACKFILL] Linked %s → cif=%s (status=%s)", complaint_id, result["cif_id"], result["status"])
+            else:
+                skipped.append({"complaint_id": complaint_id, "reason": "no cif_id returned"})
+        except Exception as exc:
+            _debug_logger.error("[BACKFILL] Failed for %s: %s", complaint_id, exc, exc_info=True)
+            errors.append({"complaint_id": complaint_id, "error": str(exc)})
+
+    return {
+        "total_candidates": len(candidates),
+        "linked": len(linked),
+        "skipped": len(skipped),
+        "errors": len(errors),
+        "details": {"linked": linked, "skipped": skipped, "errors": errors},
+    }

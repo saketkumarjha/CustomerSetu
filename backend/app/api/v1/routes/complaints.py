@@ -103,8 +103,10 @@ async def list_complaints(
 
     query = supabase.table("complaints").select(
         "complaint_id, customer_id, channel, category, compliance_category, "
-        "is_rbi_reportable, sentiment, severity, route, status, pipeline_status, "
-        "confidence_score, risk_score, sla_hours, rbi_tat_deadline, created_at",
+        "is_rbi_reportable, sentiment, severity, urgency_score, escalation_flag, "
+        "route, status, pipeline_status, "
+        "confidence_score, risk_score, sla_hours, rbi_tat_deadline, created_at, "
+        "duplicate_status, duplicate_of, merged_into, is_duplicate, cif_id, action_steps",
         count="exact"
     )
 

@@ -36,6 +36,10 @@ const LABELS: Record<TabId, { label: string; desc: string }> = {
     label: "KB Admin",
     desc: "Manage knowledge base entries and review queue",
   },
+  customers: {
+    label: "360° Customer View",
+    desc: "Complete customer history across all channels",
+  },
 };
 
 export function Breadcrumb({ active }: Props) {

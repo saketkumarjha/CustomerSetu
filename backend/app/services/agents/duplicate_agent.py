@@ -182,13 +182,18 @@ def check_for_duplicate(
 def store_embedding(complaint_id: str, embedding: list[float]) -> None:
     """
     Store the complaint's embedding in Supabase for future duplicate searches.
-    Called after confirming complaint is unique.
+    Always called — even for duplicates — so they remain valid similarity targets.
     """
+    import logging as _log
+    _logger = _log.getLogger(__name__)
     supabase = get_supabase()
     try:
-        supabase.table("complaints").update(
+        result = supabase.table("complaints").update(
             {"embedding": embedding}
         ).eq("complaint_id", complaint_id).execute()
+        if not result.data:
+            _logger.warning("[DUPLICATE] store_embedding: UPDATE returned no rows for %s — row may not exist yet", complaint_id)
+        else:
+            _logger.info("[DUPLICATE] Embedding stored for %s (%d dims)", complaint_id, len(embedding))
     except Exception as e:
-        # Non-fatal — log and continue
-        print(f"[DUPLICATE] Failed to store embedding: {e}")
+        _logger.exception("[DUPLICATE] Failed to store embedding for %s: %s", complaint_id, e)

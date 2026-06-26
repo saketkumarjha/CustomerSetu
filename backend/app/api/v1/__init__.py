@@ -15,6 +15,7 @@ from app.api.v1.routes import (
     settings,
     clusters,
     duplicates,
+    customers,
 )
 
 # Shared security scheme — makes Swagger show the padlock and documents 401
@@ -117,5 +118,11 @@ api_v1_router.include_router(
     duplicates.router,
     prefix="/duplicates",
     tags=["Duplicates"],
+    **_PROTECTED,
+)
+api_v1_router.include_router(
+    customers.router,
+    prefix="/customers",
+    tags=["Customers"],
     **_PROTECTED,
 )

@@ -15,6 +15,7 @@ import { RootCauseAnalytics } from "../analytics/RootCauseAnalytics";
 import { RBITab } from "../rbi/RBITab";
 import { SLATab } from "../sla/SLATab";
 import { KBAdminTab } from "../kb/KBAdminTab";
+import { CustomerViewTab } from "../customers/CustomerViewTab";
 
 export function MainApp() {
   const [active, setActive] = useState<TabId>("overview");
@@ -56,6 +57,7 @@ export function MainApp() {
           {active === "rbi" && <RBITab />}
           {active === "sla" && <SLATab />}
           {active === "kb" && <KBAdminTab />}
+          {active === "customers" && <CustomerViewTab />}
         </main>
       </div>
     </div>

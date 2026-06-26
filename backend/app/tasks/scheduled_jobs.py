@@ -408,6 +408,15 @@ def weekly_unverified_review() -> dict:
 # Job 4: Cleanup old processed queue entries (daily midnight)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+async def refresh_dirty_cif_summaries() -> dict:
+    """
+    Wrapper called by APScheduler every 1 minute.
+    Delegates to cif_summary_service.
+    """
+    from app.services.cif_summary_service import refresh_dirty_cif_summaries as _refresh
+    return await _refresh()
+
+
 def cleanup_old_queue_entries(retention_days: int = 90) -> dict:
     """
     Deletes processed queue entries older than retention_days.
