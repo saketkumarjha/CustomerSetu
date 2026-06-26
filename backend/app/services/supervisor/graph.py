@@ -201,8 +201,8 @@ async def duplicate_node(state: PipelineState) -> dict:
         similarity = result["similarity_score"]
         reasoning = result["reasoning"]
 
-        # Store embedding on complaint record (only if unique)
-        if not is_duplicate and result["embedding"]:
+        # Always store embedding — duplicates are valid similarity targets for future complaints
+        if result["embedding"]:
             await asyncio.to_thread(
                 store_embedding,
                 complaint_id,
@@ -626,7 +626,7 @@ async def grounding_node(state: PipelineState) -> dict:
         # Grounding failure — flag for human review conservatively
         logger.error("[PIPELINE][Grounding] failed (complaint_id=%s) — %s: %s\n%s",
                      complaint_id, type(e).__name__, e, traceback.format_exc())
-        grounding_score = 0.5
+        grounding_score = 0.0
         warnings = [{
             "type": "SYSTEM_ERROR",
             "claim": "Grounding check failed",
@@ -1009,6 +1009,13 @@ async def routing_node(state: PipelineState) -> dict:
     # Determine the final tier for the complaint so _save_pipeline_outputs
     # writes the correct current_tier to the DB (never 0).
     _final_tier = max(assigned_tier or state.get("current_tier") or 1, 1)
+
+    # Generate per-complaint summary digest (non-blocking, non-fatal)
+    try:
+        from app.services.complaint_summary_service import generate_complaint_summary
+        generate_complaint_summary(complaint_id)
+    except Exception as _summary_err:
+        logger.warning("[ROUTING] complaint summary generation failed: %s", _summary_err)
 
     return {
         "route":                      route,
