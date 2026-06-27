@@ -458,9 +458,19 @@ async def submit_complaint(
     if channel == "web":
         try:
             from app.services.email_service import extract_email_from_web_text, send_ack_email
+            from app.services.identity_service import resolve_identity, link_complaint_to_cif
+            import logging as _logging
+            _web_logger = _logging.getLogger(__name__)
             customer_email = extract_email_from_web_text(complaint_text)
             if customer_email:
                 await asyncio.to_thread(send_ack_email, customer_email, complaint_id)
+                try:
+                    _id_result = await asyncio.to_thread(resolve_identity, "email", customer_email)
+                    if _id_result["status"] in ("verified", "new") and _id_result.get("cif_id"):
+                        await asyncio.to_thread(link_complaint_to_cif, complaint_id, _id_result["cif_id"], set_pending=False)
+                        _web_logger.info("[WEB] linked complaint %s to cif=%s", complaint_id, _id_result["cif_id"])
+                except Exception as _cif_err:
+                    _web_logger.warning("[WEB] CIF link skipped for %s (%s): %s", complaint_id, customer_email, _cif_err)
         except Exception as _ack_err:
             import logging as _logging
             _logging.getLogger(__name__).warning(

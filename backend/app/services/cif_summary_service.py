@@ -62,7 +62,8 @@ async def refresh_dirty_cif_summaries() -> dict:
             summaries = comp_resp.data or []
 
             if not summaries:
-                supabase.table("cif_summaries").update({"dirty": False}).eq("cif_id", cif_id).execute()
+                # complaint_summary rows don't exist yet — leave dirty so we retry next minute
+                logger.info("[CIF_SUMMARY] no complaint_summaries yet for cif=%s, will retry", cif_id)
                 continue
 
             lines = [

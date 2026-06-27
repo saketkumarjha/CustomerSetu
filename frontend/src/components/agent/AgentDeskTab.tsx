@@ -217,6 +217,7 @@ function IncidentAlertCard({ alert }: { alert: IncidentAlert }) {
 
 // ── Duplicate-merge components ────────────────────────────────────────────────
 import { DuplicateBanner } from "../complaints/DuplicateBanner";
+import { CustomerSummaryCard } from "../customers/CustomerSummaryCard";
 
 // ── Case Detail Modal ─────────────────────────────────────────────────────────
 type ActionMode = "idle" | "edit" | "reject" | "escalate";
@@ -489,6 +490,11 @@ function CaseDetailModal({
                   ownText={summary.masked_text}
                   onActionComplete={reloadDetails}
                 />
+              )}
+
+              {/* Customer history summary */}
+              {summary?.cif_id && (
+                <CustomerSummaryCard cifId={summary.cif_id} />
               )}
 
               {/* Complaint text */}

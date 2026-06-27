@@ -1015,7 +1015,7 @@ async def routing_node(state: PipelineState) -> dict:
         from app.services.complaint_summary_service import generate_complaint_summary
         generate_complaint_summary(complaint_id)
     except Exception as _summary_err:
-        logger.warning("[ROUTING] complaint summary generation failed: %s", _summary_err)
+        logger.error("[ROUTING] complaint summary generation failed: %s", _summary_err, exc_info=True)
 
     return {
         "route":                      route,

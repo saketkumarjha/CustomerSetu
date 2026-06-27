@@ -173,3 +173,41 @@ def relink_cif_backfill():
         "errors": len(errors),
         "details": {"linked": linked, "skipped": skipped, "errors": errors},
     }
+
+
+@router.post("/backfill-summaries", summary="Backfill complaint_summary for all complaints missing it")
+def backfill_complaint_summaries():
+    """
+    Re-runs generate_complaint_summary for every complaint where complaint_summary is NULL.
+    Also marks affected cif_summaries rows as dirty so the scheduler regenerates narratives.
+    Safe to call multiple times — skips complaints that already have a summary.
+    """
+    from app.db.supabase_client import get_supabase
+    from app.services.complaint_summary_service import generate_complaint_summary
+
+    supabase = get_supabase()
+    resp = (
+        supabase.table("complaints")
+        .select("complaint_id")
+        .is_("complaint_summary", "null")
+        .not_.is_("pipeline_status", "null")
+        .execute()
+    )
+    candidates = [r["complaint_id"] for r in (resp.data or [])]
+
+    processed, errors = [], []
+    for complaint_id in candidates:
+        try:
+            generate_complaint_summary(complaint_id)
+            processed.append(complaint_id)
+            _debug_logger.info("[BACKFILL_SUMMARY] processed %s", complaint_id)
+        except Exception as exc:
+            _debug_logger.error("[BACKFILL_SUMMARY] failed for %s: %s", complaint_id, exc, exc_info=True)
+            errors.append({"complaint_id": complaint_id, "error": str(exc)})
+
+    return {
+        "total_candidates": len(candidates),
+        "processed": len(processed),
+        "errors": len(errors),
+        "details": {"processed": processed, "errors": errors},
+    }

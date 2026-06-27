@@ -1,3 +1,4 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import ComplaintReachSection from "./ComplaintReachSection";
 import { AppHeader } from "../layout/AppHeader";
@@ -9,18 +10,16 @@ import {
   Shield,
   Tag,
   Heart,
-  Activity,
   Clock,
   TrendingUp,
   Star,
   Eye,
-  Phone,
-  Mail,
-  MapPin,
   Globe,
   Share2,
   Smartphone,
   Building2,
+  Phone,
+  Mail,
 } from "lucide-react";
 import ChatbotLauncher from "../chatbot/ChatbotLauncher";
 import ChatbotWindow from "../chatbot/ChatbotWindow";
@@ -36,185 +35,285 @@ const IMG = {
 
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
+const MOCK_ROWS = [
+  {
+    icon: "📄", summary: "Unauthorized transaction on credit card ending in 4291",
+    category: "Fraud", channel: "Mobile App", risk: 9.8, riskPct: 98,
+    avatars: [{ bg: "#4f46e5", label: "JM" }, { bg: "#0891b2", label: "RH" }, { bg: "#16a34a", label: "SA" }], extra: 18,
+    priority: "Critical", priorityColor: "#ef4444", priorityIcon: "△",
+  },
+  {
+    icon: "🕐", summary: "Home loan disbursement delayed beyond 48 hours",
+    category: "Lending", channel: "Branch", risk: 7.2, riskPct: 72,
+    avatars: [{ bg: "#d97706", label: "DV" }, { bg: "#7c3aed", label: "HK" }], extra: 11,
+    priority: "High", priorityColor: "#f97316", priorityIcon: "△",
+  },
+  {
+    icon: "⌨", summary: "Unable to reset net banking password via IVR",
+    category: "Technical", channel: "WhatsApp", risk: 4.5, riskPct: 45,
+    avatars: [{ bg: "#0284c7", label: "TQ" }, { bg: "#15803d", label: "NK" }], extra: 8,
+    priority: "Medium", priorityColor: "#ca8a04", priorityIcon: "○",
+  },
+  {
+    icon: "📅", summary: "Incorrect interest rate applied to savings account",
+    category: "Compliance", channel: "Web Portal", risk: 6.1, riskPct: 61,
+    avatars: [{ bg: "#be185d", label: "FA" }, { bg: "#0891b2", label: "LC" }], extra: 6,
+    priority: "High", priorityColor: "#f97316", priorityIcon: "○",
+  },
+  {
+    icon: "💱", summary: "Rude behavior reported at Jamshedpur main branch",
+    category: "Service", channel: "WhatsApp · Mobile", risk: 8.8, riskPct: 88,
+    avatars: [{ bg: "#7c3aed", label: "EG" }, { bg: "#0891b2", label: "QS" }], extra: 5,
+    priority: "High", priorityColor: "#f97316", priorityIcon: "○",
+  },
+  {
+    icon: "🔔", summary: "KYC verification pending for over 48 hours",
+    category: "Onboarding", channel: "Web Portal · Branch", risk: 5.4, riskPct: 54,
+    avatars: [{ bg: "#16a34a", label: "PR" }], extra: 3,
+    priority: "Medium", priorityColor: "#ca8a04", priorityIcon: "○",
+  },
+];
+
+const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
+  Fraud:      { bg: "#fef2f2", text: "#dc2626" },
+  Lending:    { bg: "#fff7ed", text: "#c2410c" },
+  Technical:  { bg: "#eff6ff", text: "#2563eb" },
+  Compliance: { bg: "#faf5ff", text: "#7c3aed" },
+  Service:    { bg: "#ecfdf5", text: "#059669" },
+  Onboarding: { bg: "#f0fdf4", text: "#16a34a" },
+};
+
 function HeroSection({ onAskAI }: { onAskAI: () => void }) {
   return (
     <section
       id="top"
-      className="relative flex items-center"
-      style={{
-        minHeight: "88vh",
-        backgroundImage: `url('${IMG.hero}')`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        paddingTop: "64px", // navbar height
-      }}
+      className="flex flex-col items-center"
+      style={{ background: "#f5f0e6", paddingTop: "64px", minHeight: "92vh" }}
     >
-      {/* Gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-r from-[#001A4D]/96 via-[#002f87]/90 to-[#001A4D]/50" />
+      {/* ── Centered copy block ── */}
+      <div className="flex flex-col items-center text-center px-4 pt-14 pb-8 w-full max-w-[1100px] mx-auto">
+        {/* Badge */}
+        <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full border border-gray-300/80 bg-white/60 text-gray-600 text-xs font-medium mb-7 shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+          Enterprise-grade AI for Finance
+        </span>
 
-      <div className="relative w-full max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-24 grid lg:grid-cols-[54%_46%] gap-8 lg:gap-12 items-center">
-        {/* ── Left: headline + CTAs ── */}
-        <div>
-          <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/50 border border-white/10 text-amber-400 text-xs font-semibold mb-7">
-            <Zap size={11} fill="currentColor" />
-            Gen-AI Powered Platform
+        {/* Headline — wide enough for one line on desktop */}
+        <h1
+          style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: "clamp(2.4rem, 5.2vw, 5rem)",
+            fontWeight: 400,
+            color: "#111111",
+            letterSpacing: "-0.025em",
+            lineHeight: 1.04,
+            marginBottom: "0.9rem",
+            whiteSpace: "nowrap",
+          }}
+          className="hidden sm:block"
+        >
+          One platform. Every complaint.
+          <br />
+          <span style={{ fontStyle: "italic", fontWeight: 300, color: "#8a8a8a" }}>
+            Intelligently resolved.
           </span>
+        </h1>
+        {/* mobile — allow wrap */}
+        <h1
+          style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: "2.4rem",
+            fontWeight: 400,
+            color: "#111111",
+            letterSpacing: "-0.025em",
+            lineHeight: 1.08,
+            marginBottom: "0.9rem",
+          }}
+          className="block sm:hidden"
+        >
+          One platform. Every complaint.
+          <br />
+          <span style={{ fontStyle: "italic", fontWeight: 300, color: "#8a8a8a" }}>
+            Intelligently resolved.
+          </span>
+        </h1>
 
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[3.25rem] font-extrabold text-white leading-[1.08] tracking-tight mb-5">
-            Intelligent Complaint
-            <br />
-            Resolution Ecosystem
-          </h1>
+        {/* Subtext */}
+        <p style={{ color: "#6B6B6B" }} className="text-sm md:text-base leading-relaxed mb-8 max-w-[480px]">
+          Consolidate complaints from WhatsApp, Email, and Branch into a unified
+          AI workspace that classifies, investigates, and resolves issues with
+          full regulatory grounding.
+        </p>
 
-          <p className="text-slate-800 text-base md:text-lg leading-relaxed mb-9 max-w-[520px]">
-            Unified dashboard leveraging Gen-AI for seamless complaint
-            management across all banking channels with NLP-powered insights and
-            automated resolution.
-          </p>
-
-          <div className="flex flex-wrap items-center gap-3 md:gap-4">
-            <button
-              type="button"
-              onClick={onAskAI}
-              className="inline-flex items-center gap-2 px-6 md:px-8 py-3 md:py-3.5 rounded-lg bg-amber-400 hover:bg-amber-500 text-gray-900 font-bold text-sm transition-colors shadow-lg shadow-amber-400/20"
-            >
-              Ask AI
-              <ArrowRight size={16} />
-            </button>
-            <button className="inline-flex items-center gap-2.5 px-6 md:px-8 py-3 md:py-3.5 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-100 hover:border-slate-400 hover:text-slate-900 transition-all">
-              <span className="w-6 h-6 rounded-full border border-slate-300 flex items-center justify-center flex-shrink-0 bg-white shadow-sm">
-                <Play size={9} className="fill-slate-700 text-slate-700" />
-              </span>
-              Watch Demo
-            </button>
-          </div>
+        {/* CTAs */}
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={onAskAI}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gray-900 hover:bg-gray-800 text-white font-semibold text-sm transition-colors shadow-md"
+          >
+            Ask AI
+            <ArrowRight size={15} />
+          </button>
+          <button className="inline-flex items-center gap-2.5 px-6 py-3 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 hover:border-gray-400 transition-all shadow-sm">
+            <span className="w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center flex-shrink-0 bg-white">
+              <Play size={8} className="fill-gray-700 text-gray-700 ml-0.5" />
+            </span>
+            Watch Demo
+          </button>
         </div>
 
-        {/* ── Right: truly floating stat cards ── */}
-        <div className="hidden lg:block relative h-[440px] w-full">
-          {/* Card 1 — Avg Response Time (top-right, white) */}
-          <div
-            className="absolute top-0 right-0 z-30 bg-white rounded-2xl px-5 py-4 shadow-2xl flex items-center gap-3.5 border border-gray-50 animate-float"
-            style={{ animationDelay: "0s" }}
-          >
-            <div className="w-11 h-11 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-              <Clock size={20} className="text-amber-500" />
-            </div>
-            <div>
-              <div className="text-gray-900 font-extrabold text-2xl leading-none">
-                2.5hr
-              </div>
-              <div className="text-gray-400 text-xs mt-1">
-                Avg Response Time
+        {/* Trust line */}
+        <p className="mt-4 text-[11px] tracking-wide" style={{ color: "#9ca3af" }}>
+          SOC2 Type II Compliant&nbsp;·&nbsp;RBI Grounding Validation&nbsp;·&nbsp;Full Audit Traceability
+        </p>
+      </div>
+
+      {/* ── Browser mockup ── */}
+      <div className="w-full max-w-[900px] mx-auto px-4 pb-0">
+        <div className="rounded-2xl overflow-hidden border border-gray-200/70 bg-white" style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.10), 0 4px 16px rgba(0,0,0,0.06)" }}>
+
+          {/* Window chrome dots */}
+          <div className="bg-[#f9f9f9] border-b border-gray-100 px-4 py-3 flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
+            <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
+            <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
+          </div>
+
+          {/* Tab bar + search */}
+          <div className="bg-white border-b border-gray-100 px-5 flex items-center gap-6 py-3">
+            {["Inbox", "Pipeline", "Analytics", "Compliance"].map((tab, i) => (
+              <span
+                key={tab}
+                className="text-xs cursor-default select-none"
+                style={{
+                  fontWeight: i === 0 ? 600 : 400,
+                  color: i === 0 ? "#111" : "#9ca3af",
+                  borderBottom: i === 0 ? "2px solid #111" : "2px solid transparent",
+                  paddingBottom: "4px",
+                }}
+              >
+                {tab}
+              </span>
+            ))}
+            <div className="ml-auto">
+              <div
+                className="px-3 py-1.5 rounded-lg border text-xs hidden sm:flex items-center gap-2"
+                style={{ borderColor: "#e5e7eb", color: "#9ca3af", background: "#fafafa", width: "220px" }}
+              >
+                <span style={{ color: "#d1d5db" }}>⌕</span>
+                Search complaints, UTRs, or customers...
               </div>
             </div>
           </div>
 
-          {/* Card 2 — Live Dashboard (center, glassmorphism, main) */}
+          {/* Filter pills + sort */}
+          <div className="bg-white border-b border-gray-100 px-5 py-2.5 flex items-center gap-2">
+            {["All", "Fraud", "Lending", "Dispute", "Service"].map((f, i) => (
+              <span
+                key={f}
+                className="px-3 py-1 rounded-md text-xs cursor-default select-none"
+                style={{
+                  fontWeight: i === 0 ? 600 : 400,
+                  background: i === 0 ? "#111" : "transparent",
+                  color: i === 0 ? "#fff" : "#6b7280",
+                }}
+              >
+                {f}
+              </span>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs" style={{ color: "#6b7280" }}>Sort · Risk Score ↓</span>
+              <span
+                className="text-xs px-2.5 py-1 rounded-md border flex items-center gap-1 cursor-default"
+                style={{ borderColor: "#e5e7eb", color: "#374151", background: "#fff", fontWeight: 500 }}
+              >
+                + Custom View
+              </span>
+            </div>
+          </div>
+
+          {/* Table header */}
           <div
-            className="absolute top-16 left-0 z-20 w-[82%] bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/20 shadow-xl animate-float"
-            style={{ animationDelay: "0.8s" }}
+            className="grid px-5 py-2.5 border-b border-gray-100"
+            style={{ gridTemplateColumns: "2.6fr 0.8fr 1fr 1fr 0.9fr 0.7fr", gap: "12px", background: "#fafafa" }}
           >
-            <div className="flex items-center gap-2 mb-4">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse-dot" />
-              <span className="text-white text-sm font-semibold">
-                Live Dashboard
+            {["COMPLAINT SUMMARY", "CATEGORY", "CHANNEL", "RISK SCORE", "SLA STATUS", "PRIORITY"].map((h) => (
+              <span key={h} className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#9ca3af" }}>
+                {h}
               </span>
-              <span className="ml-auto text-blue-300/80 text-xs">
-                Updated now
-              </span>
-            </div>
-            <div className="flex items-end gap-10 mb-5">
-              <div>
-                <div className="text-white text-4xl font-extrabold">15K+</div>
-                <div className="text-blue-300 text-xs mt-1">
-                  Complaints Processed
-                </div>
-              </div>
-              <div>
-                <div className="text-blue-200 text-xs mb-1">Resolved</div>
-                <div className="text-white text-2xl font-bold">10,578</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex-1 bg-white/10 rounded-full h-2">
+            ))}
+          </div>
+
+          {/* Table rows */}
+          <div className="bg-white divide-y" style={{ borderColor: "#f3f4f6" }}>
+            {MOCK_ROWS.map((row) => {
+              const cat = CATEGORY_COLORS[row.category] ?? { bg: "#f9fafb", text: "#374151" };
+              return (
                 <div
-                  className="h-2 rounded-full bg-emerald-400"
-                  style={{ width: "70%" }}
-                />
-              </div>
-              <div className="text-right flex-shrink-0">
-                <span className="text-emerald-400 font-extrabold text-sm">
-                  98%
-                </span>
-                <span className="text-blue-300 text-xs ml-1.5">
-                  Resolution Rate
-                </span>
-              </div>
-            </div>
-          </div>
+                  key={row.summary}
+                  className="grid px-5 py-3 items-center cursor-default hover:bg-gray-50/60 transition-colors"
+                  style={{ gridTemplateColumns: "2.6fr 0.8fr 1fr 1fr 0.9fr 0.7fr", gap: "12px" }}
+                >
+                  {/* Summary */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-gray-300 text-xs flex-shrink-0">{row.icon}</span>
+                    <span className="text-xs font-medium truncate" style={{ color: "#1f2937" }}>{row.summary}</span>
+                  </div>
 
-          {/* Card 3 — AI Accuracy (mid-right, white) */}
-          <div
-            className="absolute top-[185px] right-0 z-30 bg-white rounded-xl px-4 py-3 shadow-xl flex items-center gap-3 border border-gray-50 animate-float"
-            style={{ animationDelay: "1.6s" }}
-          >
-            <div className="w-9 h-9 rounded-lg bg-ub-blue/10 flex items-center justify-center flex-shrink-0">
-              <BarChart2 size={16} className="text-ub-blue" />
-            </div>
-            <div>
-              <div className="text-gray-900 font-extrabold text-lg leading-none">
-                94.2%
-              </div>
-              <div className="text-gray-400 text-xs mt-0.5">AI Accuracy</div>
-            </div>
-          </div>
+                  {/* Category badge */}
+                  <span
+                    className="px-2 py-0.5 rounded text-[10px] font-semibold w-fit"
+                    style={{ background: cat.bg, color: cat.text }}
+                  >
+                    {row.category}
+                  </span>
 
-          {/* Card 4 — Customer Satisfaction (bottom-left, white) */}
-          <div
-            className="absolute bottom-12 left-0 z-30 bg-white rounded-xl px-4 py-3 shadow-xl border border-gray-50 animate-float"
-            style={{ animationDelay: "2.4s" }}
-          >
-            <div className="text-gray-400 text-[11px] mb-2">
-              Customer Satisfaction
-            </div>
-            <div className="flex items-center gap-2.5">
-              <div className="flex gap-0.5">
-                {[...Array(4)].map((_, i) => (
-                  <Star
-                    key={i}
-                    size={13}
-                    fill="#fbbf24"
-                    className="text-amber-400"
-                  />
-                ))}
-                <Star size={13} className="text-gray-200" fill="#e5e7eb" />
-              </div>
-              <span className="text-gray-900 font-extrabold text-base">
-                4.2/5
-              </span>
-            </div>
-          </div>
+                  {/* Channel */}
+                  <span className="text-xs" style={{ color: "#6b7280" }}>{row.channel}</span>
 
-          {/* Card 5 — Agents Active (bottom-right, white) */}
-          <div
-            className="absolute bottom-0 right-0 z-30 bg-white rounded-xl px-4 py-3 shadow-xl flex items-center gap-3 border border-gray-50 animate-float"
-            style={{ animationDelay: "0.4s" }}
-          >
-            <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center flex-shrink-0">
-              <Activity size={16} className="text-emerald-600" />
-            </div>
-            <div>
-              <div className="text-gray-900 font-bold text-sm leading-none">
-                6 Agents Active
-              </div>
-              <div className="flex items-center gap-1.5 mt-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span className="text-emerald-500 text-xs font-medium">
-                  Online · 92.4% confidence
-                </span>
-              </div>
-            </div>
+                  {/* Risk score */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "#f3f4f6", maxWidth: "72px" }}>
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${row.riskPct}%`, background: "#22c55e" }}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold" style={{ color: "#374151" }}>{row.risk}</span>
+                  </div>
+
+                  {/* Avatar stack (SLA STATUS) */}
+                  <div className="flex items-center">
+                    <div className="flex -space-x-1.5">
+                      {row.avatars.map((av) => (
+                        <span
+                          key={av.label}
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-white border-2 border-white"
+                          style={{ background: av.bg, fontSize: "7px", fontWeight: 700 }}
+                        >
+                          {av.label}
+                        </span>
+                      ))}
+                      {row.extra > 0 && (
+                        <span
+                          className="w-5 h-5 rounded-full flex items-center justify-center border-2 border-white"
+                          style={{ background: "#374151", fontSize: "7px", fontWeight: 700, color: "#fff" }}
+                        >
+                          +{row.extra}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Priority */}
+                  <span className="text-xs font-semibold flex items-center gap-0.5" style={{ color: row.priorityColor }}>
+                    <span style={{ fontSize: "10px" }}>{row.priorityIcon}</span>
+                    {row.priority}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -253,21 +352,33 @@ function StatsBar() {
   ];
 
   return (
-    <section className="bg-[#f5ecda] py-14">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12">
+    <section style={{ background: "#ffffff", borderTop: "1px solid #ede9e0" }} className="py-16">
+      <div className="max-w-4xl mx-auto px-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-gray-100">
           {stats.map(({ icon: Icon, value, label, sub }) => (
-            <div key={label} className="flex flex-col items-center text-center">
-              <div className="w-14 h-14 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center mb-4">
-                <Icon size={22} className="text-ub-blue" />
+            <div key={label} className="flex flex-col items-center text-center px-6 py-2">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center mb-4"
+                style={{ border: "1px solid #e5e7eb", background: "#fafaf9" }}
+              >
+                <Icon size={15} style={{ color: "#9ca3af" }} />
               </div>
-              <div className="text-ub-blue font-extrabold text-2xl md:text-3xl">
+              <div
+                style={{
+                  fontFamily: "'Playfair Display', Georgia, serif",
+                  fontSize: "clamp(1.6rem, 3vw, 2.2rem)",
+                  fontWeight: 400,
+                  color: "#111111",
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1,
+                }}
+              >
                 {value}
               </div>
-              <div className="text-gray-800 font-semibold text-sm mt-1">
+              <div className="text-sm font-medium mt-2.5" style={{ color: "#374151" }}>
                 {label}
               </div>
-              <div className="text-gray-400 text-xs mt-0.5 hidden sm:block">
+              <div className="text-xs mt-1 hidden sm:block" style={{ color: "#9ca3af" }}>
                 {sub}
               </div>
             </div>
@@ -282,16 +393,29 @@ function StatsBar() {
 
 function AnalyticsSection() {
   return (
-    <section id="analytics" className="py-16 md:py-24 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <div className="text-ub-blue text-xs font-bold uppercase tracking-[0.15em] mb-3">
+    <section id="analytics" style={{ background: "#f5f0e6" }} className="py-20 md:py-28">
+      <div className="max-w-5xl mx-auto px-6 lg:px-8">
+        <div className="text-center mb-14">
+          <span
+            className="inline-block uppercase tracking-[0.15em] mb-4"
+            style={{ fontSize: "11px", color: "#9ca3af", fontWeight: 500, letterSpacing: "0.15em" }}
+          >
             Analytics &amp; Insights
-          </div>
-          <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">
-            Real-Time Intelligence at Your Fingertips
+          </span>
+          <h2
+            style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: "clamp(1.9rem, 4vw, 3rem)",
+              fontWeight: 400,
+              color: "#111111",
+              letterSpacing: "-0.02em",
+              lineHeight: 1.1,
+            }}
+          >
+            Real-time intelligence,<br />
+            <span style={{ fontStyle: "italic", fontWeight: 300, color: "#8a8a8a" }}>at your fingertips.</span>
           </h2>
-          <p className="text-gray-400 mt-4 max-w-2xl mx-auto text-sm md:text-[15px] leading-relaxed">
+          <p className="mt-4 max-w-xl mx-auto text-sm leading-relaxed" style={{ color: "#6b7280" }}>
             Monitor complaint trends, sentiment distribution, SLA compliance,
             and agent health — all from a single unified command center.
           </p>
@@ -299,21 +423,19 @@ function AnalyticsSection() {
 
         {/* Browser mockup */}
         <div className="max-w-4xl mx-auto">
-          <div className="rounded-2xl overflow-hidden shadow-2xl border border-gray-200 bg-white">
-            {/* Chrome bar */}
-            <div className="bg-gray-100 px-4 py-3 flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-400 flex-shrink-0" />
-              <div className="w-3 h-3 rounded-full bg-yellow-400 flex-shrink-0" />
-              <div className="w-3 h-3 rounded-full bg-green-400 flex-shrink-0" />
-              <div className="flex-1 mx-4 min-w-0">
-                <div className="bg-white rounded px-3 py-1 text-xs text-gray-400 text-center shadow-sm truncate">
-                  complaint-intelligence-hub.unionbank.in
-                </div>
-              </div>
-              <div className="hidden sm:flex items-center gap-1.5 bg-white rounded-lg px-3 py-1 shadow text-xs border border-gray-100 flex-shrink-0">
-                <Clock size={11} className="text-ub-red" />
-                <span className="font-semibold text-gray-700">2.4 hrs</span>
-                <span className="text-gray-400">Avg Resolution</span>
+          <div
+            className="rounded-2xl overflow-hidden border bg-white"
+            style={{ borderColor: "#e5e7eb", boxShadow: "0 20px 60px rgba(0,0,0,0.09), 0 4px 16px rgba(0,0,0,0.05)" }}
+          >
+            {/* Chrome dots */}
+            <div className="bg-[#f9f9f9] border-b px-4 py-3 flex items-center gap-1.5" style={{ borderColor: "#f0ede6" }}>
+              <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
+              <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
+              <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
+              <div className="hidden sm:flex items-center gap-1.5 ml-auto bg-white rounded-md px-2.5 py-1 text-xs border" style={{ borderColor: "#e5e7eb", color: "#9ca3af" }}>
+                <Clock size={10} style={{ color: "#9ca3af" }} />
+                <span style={{ color: "#374151", fontWeight: 600 }}>2.4 hrs</span>
+                <span>Avg Resolution</span>
               </div>
             </div>
             {/* Image */}
@@ -323,22 +445,22 @@ function AnalyticsSection() {
                 alt="Customer service analytics platform"
                 className="w-full h-56 sm:h-72 md:h-96 object-cover object-top"
               />
-              <div className="absolute bottom-4 left-4 bg-white rounded-xl px-4 py-2.5 shadow-xl flex items-center gap-2">
-                <BarChart2 size={16} className="text-blue-500" />
+              <div
+                className="absolute bottom-4 left-4 bg-white rounded-xl px-4 py-2.5 flex items-center gap-2"
+                style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.10)" }}
+              >
+                <BarChart2 size={15} style={{ color: "#6b7280" }} />
                 <div>
-                  <div className="font-extrabold text-gray-900 text-sm leading-none">
-                    15K+
-                  </div>
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    Processed Today
-                  </div>
+                  <div className="font-semibold text-sm leading-none" style={{ color: "#111" }}>15K+</div>
+                  <div className="text-xs mt-0.5" style={{ color: "#9ca3af" }}>Processed Today</div>
                 </div>
               </div>
-              <div className="absolute top-4 right-4 bg-white rounded-xl px-3 py-2 shadow-xl flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-xs font-semibold text-gray-700">
-                  System Active
-                </span>
+              <div
+                className="absolute top-4 right-4 bg-white rounded-xl px-3 py-2 flex items-center gap-2"
+                style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.10)" }}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                <span className="text-xs font-medium" style={{ color: "#374151" }}>System Active</span>
               </div>
             </div>
           </div>
@@ -354,77 +476,94 @@ function FeaturesSection() {
   const features = [
     {
       icon: Tag,
-      color: "bg-purple-700",
       label: "NLP-Powered Categorization",
       desc: "Gen-AI automatically classifies complaints by type, product, severity, and sentiment using advanced transformer-based NLP models.",
     },
     {
       icon: Eye,
-      color: "bg-purple-500",
       label: "360° Complaint Visibility",
       desc: "Comprehensive view of each complaint with full communication history, SLA tracking, escalation management, and regulatory reporting.",
     },
     {
       icon: Zap,
-      color: "bg-green-600",
       label: "Automated Response Drafts",
       desc: "AI generates personalized draft responses for agent review, suggests resolution templates, and identifies duplicate complaints.",
     },
     {
       icon: BarChart2,
-      color: "bg-ub-blue",
       label: "Real-Time Analytics",
       desc: "Live dashboards showing complaint trends, sentiment analysis, resolution rates, and geographic distribution across all channels.",
     },
     {
       icon: Heart,
-      color: "bg-amber-500",
       label: "Customer Satisfaction Tracking",
       desc: "CSAT scores, NPS metrics, verbatim feedback analysis, and AI-identified improvement areas to drive continuous service enhancement.",
     },
     {
       icon: TrendingUp,
-      color: "bg-ub-red",
       label: "Feedback Intelligence",
       desc: "Automated feedback collection with AI-powered sentiment analysis, trend identification, and actionable improvement recommendations.",
     },
   ];
 
   return (
-    <section id="features" className="py-16 md:py-24 bg-white">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">
-            Gen-AI Powered Complaint Management
+    <section id="features" style={{ background: "#ffffff" }} className="py-20 md:py-28">
+      <div className="max-w-5xl mx-auto px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <span
+            className="inline-block uppercase tracking-[0.15em] mb-4"
+            style={{ fontSize: "11px", color: "#9ca3af", fontWeight: 500 }}
+          >
+            Capabilities
+          </span>
+          <h2
+            style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: "clamp(1.9rem, 4vw, 3rem)",
+              fontWeight: 400,
+              color: "#111111",
+              letterSpacing: "-0.02em",
+              lineHeight: 1.1,
+            }}
+          >
+            Gen-AI powered complaint management
           </h2>
-          <p className="text-gray-400 mt-4 max-w-3xl mx-auto text-sm md:text-[15px] leading-relaxed">
+          <p className="mt-4 max-w-xl mx-auto text-sm leading-relaxed" style={{ color: "#6b7280" }}>
             Transform how Union Bank handles customer complaints with AI-driven
             insights, automated workflows, and comprehensive analytics.
           </p>
         </div>
 
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-          {features.map(({ icon: Icon, color, label, desc }) => (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {features.map(({ icon: Icon, label, desc }) => (
             <div
               key={label}
-              className="border border-gray-100 rounded-xl p-6 hover:shadow-lg transition-shadow group cursor-default"
+              className="rounded-2xl p-6 group cursor-default transition-all"
+              style={{
+                border: "1px solid #f0ede6",
+                background: "#faf9f7",
+              }}
+              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "0 8px 32px rgba(0,0,0,0.07)"; (e.currentTarget as HTMLDivElement).style.background = "#fff"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.boxShadow = "none"; (e.currentTarget as HTMLDivElement).style.background = "#faf9f7"; }}
             >
               <div
-                className={`w-12 h-12 rounded-full ${color} flex items-center justify-center mb-5`}
+                className="w-9 h-9 rounded-full flex items-center justify-center mb-5"
+                style={{ border: "1px solid #e5e7eb", background: "#fff" }}
               >
-                <Icon size={20} className="text-white" />
+                <Icon size={15} style={{ color: "#6b7280" }} />
               </div>
-              <h3 className="text-gray-900 font-bold text-base mb-2">
+              <h3 className="font-semibold text-sm mb-2.5" style={{ color: "#111111" }}>
                 {label}
               </h3>
-              <p className="text-gray-400 text-sm leading-relaxed mb-5">
+              <p className="text-sm leading-relaxed mb-5" style={{ color: "#6b7280" }}>
                 {desc}
               </p>
               <Link
                 to="/complaint"
-                className="inline-flex items-center gap-1.5 text-amber-500 font-semibold text-sm group-hover:gap-3 transition-all"
+                className="inline-flex items-center gap-1.5 text-sm font-medium group-hover:gap-2.5 transition-all"
+                style={{ color: "#374151" }}
               >
-                Learn More <ArrowRight size={13} />
+                Learn more <ArrowRight size={12} />
               </Link>
             </div>
           ))}
@@ -438,9 +577,12 @@ function FeaturesSection() {
 
 function CTASection() {
   return (
-    <section className="py-16 md:py-20 bg-gray-50">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 grid md:grid-cols-2 gap-10 md:gap-16 items-center">
-        <div className="rounded-2xl overflow-hidden shadow-xl order-2 md:order-1">
+    <section style={{ background: "#f5f0e6" }} className="py-20 md:py-28">
+      <div className="max-w-5xl mx-auto px-6 lg:px-8 grid md:grid-cols-2 gap-12 md:gap-20 items-center">
+        <div
+          className="rounded-2xl overflow-hidden order-2 md:order-1"
+          style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.09), 0 4px 16px rgba(0,0,0,0.05)" }}
+        >
           <img
             src={IMG.handle}
             alt="Handling customer complaints"
@@ -448,13 +590,27 @@ function CTASection() {
           />
         </div>
         <div className="order-1 md:order-2">
-          <div className="text-ub-blue text-xs font-bold uppercase tracking-[0.15em] mb-3">
+          <span
+            className="inline-block uppercase tracking-[0.15em] mb-4"
+            style={{ fontSize: "11px", color: "#9ca3af", fontWeight: 500 }}
+          >
             Ready to Transform?
-          </div>
-          <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mb-4 leading-tight">
-            Start Resolving Complaints Smarter, Faster
+          </span>
+          <h2
+            style={{
+              fontFamily: "'Playfair Display', Georgia, serif",
+              fontSize: "clamp(1.8rem, 3.5vw, 2.6rem)",
+              fontWeight: 400,
+              color: "#111111",
+              letterSpacing: "-0.02em",
+              lineHeight: 1.15,
+              marginBottom: "1rem",
+            }}
+          >
+            Start resolving complaints<br />
+            <span style={{ fontStyle: "italic", fontWeight: 300, color: "#8a8a8a" }}>smarter, and faster.</span>
           </h2>
-          <p className="text-gray-500 text-sm md:text-base leading-relaxed mb-8">
+          <p className="text-sm leading-relaxed mb-8" style={{ color: "#6b7280" }}>
             Join Union Bank's AI-powered complaint management platform and
             deliver faster resolutions, higher satisfaction, and full regulatory
             compliance — all in one unified dashboard.
@@ -462,13 +618,15 @@ function CTASection() {
           <div className="flex flex-wrap gap-3">
             <Link
               to="/complaint"
-              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-lg bg-ub-blue text-white font-bold text-sm hover:bg-ub-blue-dark transition-colors shadow-lg shadow-blue-900/20"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-white font-semibold text-sm transition-colors"
+              style={{ background: "#111111" }}
             >
-              Get Started Now <ArrowRight size={16} />
+              Get Started Now <ArrowRight size={14} />
             </Link>
             <a
               href="#Reach Out"
-              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-lg border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-100 transition-colors"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-medium transition-all"
+              style={{ border: "1px solid #d1d5db", color: "#374151", background: "#fff" }}
             >
               Learn More
             </a>
@@ -481,83 +639,145 @@ function CTASection() {
 
 // ─── Omnichannel Section ──────────────────────────────────────────────────────
 
+const CHANNEL_PILLS = ["WhatsApp", "Email", "Mobile Banking", "Call Center", "Branch Portal", "Web Portal"];
+
+// Hub icon nodes: [icon, dark-bg?, top%, left%]
+const HUB_NODES: { icon: React.ElementType; dark?: boolean; top: number; left: number }[] = [
+  { icon: Mail,       dark: false, top: 4,  left: 28 },
+  { icon: Globe,      dark: false, top: 4,  left: 68 },
+  { icon: Phone,      dark: false, top: 42, left: 6  },
+  { icon: Building2,  dark: false, top: 80, left: 28 },
+  { icon: Share2,     dark: false, top: 80, left: 68 },
+];
+
 function OmnichannelSection() {
-  const channels = [
-    {
-      icon: Building2,
-      label: "Branch",
-      count: "4,200 complaints",
-      color: "bg-slate-500",
-    },
-    {
-      icon: Phone,
-      label: "Phone",
-      count: "3,800 complaints",
-      color: "bg-teal-500",
-    },
-    {
-      icon: Mail,
-      label: "Email",
-      count: "2,800 complaints",
-      color: "bg-green-600",
-    },
-    {
-      icon: Smartphone,
-      label: "Mobile App",
-      count: "3,400 complaints",
-      color: "bg-purple-600",
-    },
-    {
-      icon: Globe,
-      label: "Web Portal",
-      count: "2,900 complaints",
-      color: "bg-orange-500",
-    },
-    {
-      icon: Share2,
-      label: "Social Media",
-      count: "1,200 complaints",
-      color: "bg-ub-red",
-    },
-  ];
-
   return (
-    <section className="py-16 md:py-24 bg-ub-blue">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8">
-        <div className="text-center mb-12">
-          <span className="inline-block px-4 py-1.5 rounded-full bg-white/10 text-white/80 text-xs font-semibold uppercase tracking-wider mb-5">
-            Omnichannel
-          </span>
-          <h2 className="text-3xl md:text-4xl font-extrabold text-white">
-            All Channels, One Platform
-          </h2>
-          <p className="text-blue-200 mt-4 max-w-2xl mx-auto text-sm md:text-[15px] leading-relaxed">
-            Seamlessly aggregate complaints from every customer touchpoint into
-            a unified Gen-AI powered dashboard.
-          </p>
-        </div>
+    <section style={{ background: "#f5f0e6" }} className="py-20 md:py-28">
+      <div className="max-w-5xl mx-auto px-6 lg:px-8">
+        <div className="grid md:grid-cols-2 gap-16 items-center">
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-          {channels.map(({ icon: Icon, label, count, color }) => (
-            <div
-              key={label}
-              className="flex flex-col items-center text-center p-4 md:p-5 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition-colors"
+          {/* ── Left: copy ── */}
+          <div>
+            <span
+              className="inline-block uppercase tracking-[0.15em] mb-5"
+              style={{ fontSize: "11px", color: "#9ca3af", fontWeight: 500 }}
             >
-              <div
-                className={`w-12 h-12 rounded-full ${color} flex items-center justify-center mb-3 shadow-lg flex-shrink-0`}
-              >
-                <Icon size={20} className="text-white" />
-              </div>
-              <div className="text-white font-bold text-sm mb-1">{label}</div>
-              <div className="text-blue-200 text-xs mb-2.5">{count}</div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span className="text-emerald-400 text-xs font-medium">
-                  Active
+              Omnichannel Connectivity
+            </span>
+            <h2
+              style={{
+                fontFamily: "'Playfair Display', Georgia, serif",
+                fontSize: "clamp(2rem, 4vw, 3rem)",
+                fontWeight: 400,
+                color: "#111111",
+                letterSpacing: "-0.025em",
+                lineHeight: 1.1,
+                marginBottom: "1.2rem",
+              }}
+            >
+              Sync every channel.<br />
+              <span style={{ fontStyle: "italic", fontWeight: 300, color: "#8a8a8a" }}>
+                Own the resolution.
+              </span>
+            </h2>
+            <p className="text-sm leading-relaxed mb-8 max-w-sm" style={{ color: "#6b7280" }}>
+              Our platform acts as a unified layer over your existing
+              communication stack, ingesting complaints from WhatsApp, Email,
+              and Branch portals into a single AI-powered pipeline. No data
+              silos, just total visibility.
+            </p>
+            {/* Channel pills */}
+            <div className="flex flex-wrap gap-2">
+              {CHANNEL_PILLS.map((ch) => (
+                <span
+                  key={ch}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm cursor-default"
+                  style={{ border: "1px solid #d1cfc8", color: "#374151", background: "transparent" }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                  {ch}
                 </span>
-              </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* ── Right: hub diagram ── */}
+          <div className="relative hidden md:block" style={{ height: "340px" }}>
+            {/* SVG dashed lines from center to each node */}
+            <svg
+              className="absolute inset-0 w-full h-full pointer-events-none"
+              style={{ zIndex: 0 }}
+            >
+              {HUB_NODES.map((n, i) => {
+                const cx = 52, cy = 42; // center node % of 100
+                return (
+                  <line
+                    key={i}
+                    x1={`${cx}%`} y1={`${cy}%`}
+                    x2={`${n.left + 4}%`} y2={`${n.top + 4}%`}
+                    stroke="#d1cfc8"
+                    strokeWidth="1"
+                    strokeDasharray="4 4"
+                  />
+                );
+              })}
+              {/* Line to right dark node */}
+              <line
+                x1="52%" y1="42%"
+                x2="92%" y2="42%"
+                stroke="#d1cfc8"
+                strokeWidth="1"
+                strokeDasharray="4 4"
+              />
+            </svg>
+
+            {/* Surrounding white icon cards */}
+            {HUB_NODES.map(({ icon: Icon, top, left }) => (
+              <div
+                key={`${top}-${left}`}
+                className="absolute flex items-center justify-center rounded-2xl"
+                style={{
+                  top: `${top}%`, left: `${left}%`,
+                  width: "52px", height: "52px",
+                  background: "#fff",
+                  border: "1px solid #e5e7eb",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                  zIndex: 1,
+                }}
+              >
+                <Icon size={20} style={{ color: "#6b7280" }} />
+              </div>
+            ))}
+
+            {/* Center hub — dark */}
+            <div
+              className="absolute flex items-center justify-center rounded-2xl"
+              style={{
+                top: "34%", left: "44%",
+                width: "60px", height: "60px",
+                background: "#111111",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.18)",
+                zIndex: 2,
+              }}
+            >
+              <Smartphone size={24} style={{ color: "#fff" }} />
+            </div>
+
+            {/* Far-right dark node */}
+            <div
+              className="absolute flex items-center justify-center rounded-2xl"
+              style={{
+                top: "34%", left: "84%",
+                width: "52px", height: "52px",
+                background: "#111111",
+                boxShadow: "0 4px 20px rgba(0,0,0,0.18)",
+                zIndex: 2,
+              }}
+            >
+              <Globe size={20} style={{ color: "#fff" }} />
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
@@ -566,128 +786,117 @@ function OmnichannelSection() {
 
 // ─── Footer ───────────────────────────────────────────────────────────────────
 
-function Footer() {
-  const platform = [
-    "Analytics Dashboard",
-    "AI Performance",
-    "Complaints Table",
-    "AI Reach Out",
-  ];
-  const insights = [
-    "Customer Satisfaction",
-    "Feedback Center",
-    "SLA Tracking",
-    "Trend Analysis",
-  ];
-  const legal = ["Privacy Policy", "Terms of Service", "Regulatory Compliance"];
+const FOOTER_QUESTIONS = [
+  "How does it verify RBI compliance?",
+  "Can it merge WhatsApp and Email tickets?",
+  "What is the grounding accuracy score?",
+  "Is the decision trail audit-ready?",
+];
 
+const FOOTER_COLS = [
+  {
+    heading: "Platform",
+    links: ["Analytics Dashboard", "AI Performance", "Complaints Table", "AI Reach Out"],
+  },
+  {
+    heading: "Solutions",
+    links: ["Retail Banking", "Corporate Banking", "NRI Services", "Digital Banking"],
+  },
+  {
+    heading: "Resources",
+    links: ["Documentation", "API Reference", "Compliance Guide", "Security Whitepaper"],
+  },
+  {
+    heading: "Company",
+    links: ["About", "Careers", "Privacy Policy", "Terms of Service"],
+  },
+];
+
+function Footer() {
   return (
-    <footer className="bg-[#001A4D]">
-      <div className="max-w-7xl mx-auto px-6 lg:px-8 pt-14 pb-8">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10 lg:gap-12 mb-12">
+    <footer style={{ background: "#f5f0e6", borderTop: "1px solid #ede9e0" }}>
+      {/* Pre-footer CTA */}
+      <div className="max-w-5xl mx-auto px-6 lg:px-8 pt-16 pb-14" style={{ borderBottom: "1px solid #ede9e0" }}>
+        <h2
+          className="mb-6 flex items-center gap-2"
+          style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: "clamp(1.4rem, 3vw, 2rem)",
+            fontWeight: 400,
+            color: "#111111",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Ask about the intelligence layer
+          <ArrowRight size={20} style={{ color: "#6b7280", marginTop: "2px" }} />
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {FOOTER_QUESTIONS.map((q) => (
+            <span
+              key={q}
+              className="px-4 py-2 rounded-full text-sm cursor-default transition-colors"
+              style={{ border: "1px solid #d1cfc8", color: "#374151", background: "transparent" }}
+              onMouseEnter={e => { (e.currentTarget as HTMLSpanElement).style.background = "#fff"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLSpanElement).style.background = "transparent"; }}
+            >
+              {q}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Main footer grid */}
+      <div className="max-w-5xl mx-auto px-6 lg:px-8 py-12">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8">
           {/* Brand */}
-          <div className="sm:col-span-2 lg:col-span-1">
-            <div className="bg-white rounded-lg px-3 py-2 inline-flex mb-5">
-              <img
-                src="/logo.jpeg"
-                alt="Union Bank of India"
-                className="h-9 w-auto object-contain"
-              />
+          <div className="lg:col-span-1">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="bg-white rounded-lg px-2 py-1.5 inline-flex border" style={{ borderColor: "#ede9e0" }}>
+                <img src="/logo.jpeg" alt="Union Bank of India" className="h-6 w-auto object-contain" />
+              </div>
+              <span className="text-sm font-medium" style={{ color: "#111111" }}>Union Bank</span>
             </div>
-            <p className="text-blue-300/80 text-sm leading-relaxed">
-              Unified Customer Complaint Communication Dashboard powered by
-              Gen-AI for seamless complaint management across all banking
-              channels.
+            <p className="text-sm leading-relaxed" style={{ color: "#9ca3af" }}>
+              The intelligent workspace for modern financial institutions to resolve every customer complaint.
             </p>
           </div>
 
-          {/* Platform */}
-          <div>
-            <h4 className="text-white font-bold text-sm mb-5">Platform</h4>
-            <ul className="space-y-3.5">
-              {platform.map((item) => (
-                <li key={item}>
-                  <Link
-                    to="/complaint"
-                    className="text-blue-300/70 text-sm hover:text-white transition-colors"
-                  >
-                    {item}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Insights */}
-          <div>
-            <h4 className="text-white font-bold text-sm mb-5">Insights</h4>
-            <ul className="space-y-3.5">
-              {insights.map((item) => (
-                <li key={item}>
-                  <Link
-                    to="/complaint"
-                    className="text-blue-300/70 text-sm hover:text-white transition-colors"
-                  >
-                    {item}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Contact */}
-          <div>
-            <h4 className="text-white font-bold text-sm mb-5">Contact</h4>
-            <ul className="space-y-4">
-              <li className="flex items-start gap-3">
-                <Phone
-                  size={14}
-                  className="text-blue-400 mt-0.5 flex-shrink-0"
-                />
-                <span className="text-blue-300/70 text-sm">1800 22 22 44</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Mail
-                  size={14}
-                  className="text-blue-400 mt-0.5 flex-shrink-0"
-                />
-                <span className="text-blue-300/70 text-sm break-all">
-                  contact@unionbankofindia.co.in
-                </span>
-              </li>
-              <li className="flex items-start gap-3">
-                <MapPin
-                  size={14}
-                  className="text-blue-400 mt-0.5 flex-shrink-0"
-                />
-                <span className="text-blue-300/70 text-sm">
-                  Union Bank Bhavan, Nariman Point, Mumbai
-                </span>
-              </li>
-            </ul>
-          </div>
+          {/* Nav columns */}
+          {FOOTER_COLS.map(({ heading, links }) => (
+            <div key={heading}>
+              <h4
+                className="mb-4 uppercase tracking-[0.12em]"
+                style={{ fontSize: "11px", color: "#9ca3af", fontWeight: 600 }}
+              >
+                {heading}
+              </h4>
+              <ul className="space-y-3">
+                {links.map((item) => (
+                  <li key={item}>
+                    <Link
+                      to="/complaint"
+                      className="text-sm transition-colors"
+                      style={{ color: "#374151" }}
+                      onMouseEnter={e => (e.currentTarget.style.color = "#111111")}
+                      onMouseLeave={e => (e.currentTarget.style.color = "#374151")}
+                    >
+                      {item}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
 
         {/* Bottom bar */}
-        <div className="border-t border-white/10 pt-7 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-blue-400/40 text-xs">
-            © 2026 Union Bank of India. All rights reserved.
+        <div className="mt-12 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3" style={{ borderTop: "1px solid #ede9e0" }}>
+          <p className="text-xs" style={{ color: "#9ca3af" }}>
+            © 2026 Union Bank of India Complaint Resolution Platform.
           </p>
-          <div className="flex items-center gap-2 flex-wrap justify-center">
-            {legal.map((item, i) => (
-              <span key={item} className="flex items-center gap-2">
-                <a
-                  href="#"
-                  className="text-blue-400/40 text-xs hover:text-white/70 transition-colors"
-                >
-                  {item}
-                </a>
-                {i < legal.length - 1 && (
-                  <span className="text-white/15 text-xs">•</span>
-                )}
-              </span>
-            ))}
-          </div>
+          <p className="text-xs" style={{ color: "#9ca3af" }}>
+            Designed and engineered in Jamshedpur, India.
+          </p>
         </div>
       </div>
     </footer>
