@@ -1,0 +1,2 @@
+# Optional — only needed when CRE_L2_ENABLED or CRE_L3_ENABLED=true
+openai>=1.0.0
