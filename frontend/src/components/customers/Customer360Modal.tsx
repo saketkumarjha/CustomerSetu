@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, User, FileText, Clock, MessageSquare, Reply, AlertCircle, StickyNote, BarChart2, ChevronRight } from "lucide-react";
 import { api } from "../../lib/api";
-import type { CustomerDetail } from "../../types";
+import type { CustomerDetail, Channel, Status } from "../../types";
 import { getInitials } from "../../utils/styles";
 import { StatusBadge } from "../ui/StatusBadge";
 import { ChannelBadge } from "../ui/ChannelBadge";
@@ -239,9 +239,9 @@ function ComplaintsTab({ data }: { data: CustomerDetail }) {
             {data.complaints.map((c: Record<string, unknown>) => (
               <tr key={String(c.complaint_id)} className="hover:bg-slate-50 transition-colors">
                 <td className="px-3 py-2 font-mono text-slate-500 max-w-[100px] truncate">{String(c.complaint_id ?? "").slice(0, 8)}…</td>
-                <td className="px-3 py-2"><ChannelBadge channel={String(c.channel ?? "")} /></td>
+                <td className="px-3 py-2"><ChannelBadge channel={String(c.channel ?? "") as Channel} /></td>
                 <td className="px-3 py-2 text-slate-600">{String(c.category ?? "—")}</td>
-                <td className="px-3 py-2"><StatusBadge status={String(c.status ?? "")} route={String(c.route ?? "")} /></td>
+                <td className="px-3 py-2"><StatusBadge status={String(c.status ?? "") as Status} /></td>
                 <td className="px-3 py-2 text-slate-500">{c.severity != null ? String(c.severity) : "—"}</td>
                 <td className="px-3 py-2 text-slate-500">{String(c.sentiment ?? "—")}</td>
                 <td className="px-3 py-2 text-slate-400">{String(c.created_at ?? "").slice(0, 10)}</td>
@@ -319,7 +319,7 @@ function RepliesTab({ data }: { data: CustomerDetail }) {
       {data.replies.map((r, i) => (
         <div key={i} className="border border-slate-200 rounded-xl p-4 space-y-2">
           <div className="flex items-center gap-2">
-            <ChannelBadge channel={r.channel ?? ""} />
+            <ChannelBadge channel={(r.channel ?? "") as Channel} />
             <span className="text-[10px] font-mono text-slate-400">{String(r.complaint_id).slice(0, 8)}…</span>
             <span className="ml-auto text-[10px] text-slate-400">{(r.timestamp ?? "").slice(0, 10)}</span>
           </div>
@@ -344,7 +344,7 @@ function FollowupsTab({ data }: { data: CustomerDetail }) {
         <div key={i} className="border border-amber-200 bg-amber-50 rounded-xl p-3 space-y-1.5">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-slate-600">{String(f.complaint_id).slice(0, 8)}…</span>
-            {f.channel && <ChannelBadge channel={f.channel} />}
+            {f.channel && <ChannelBadge channel={f.channel as Channel} />}
             <span className="ml-auto text-[10px] text-slate-400">{(f.timestamp ?? "").slice(0, 10)}</span>
           </div>
           {f.duplicate_of && (
@@ -353,7 +353,7 @@ function FollowupsTab({ data }: { data: CustomerDetail }) {
             </p>
           )}
           {f.category && <p className="text-xs text-slate-600">{f.category}</p>}
-          {f.status && <StatusBadge status={f.status} route="" />}
+          {f.status && <StatusBadge status={f.status as Status} />}
         </div>
       ))}
     </div>
