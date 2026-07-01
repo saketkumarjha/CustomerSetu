@@ -890,7 +890,8 @@ The platform generates data organically as complaints flow through the pipeline:
 | **Team Name** | CustomerSetu                                                            |
 | **Institute** | _RGIPT (an institution of national importance, along the line of IITs)_ |
 | **Email**     | jhasaket99dbg@gmail.com                                                 |
-| **Hackathon** | Phase 2 Submission                                                      |
+| **Hackathon** | Phase 3 Submission
+|
 
 ---
 
