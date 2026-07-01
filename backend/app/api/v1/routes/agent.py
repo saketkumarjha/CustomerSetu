@@ -87,10 +87,28 @@ def get_queue(
         )
         rows = queue_result.data or []
     except Exception as exc:
-        # Swallow transient socket errors and schema-cache misses — return empty queue
-        # rather than crashing the agent desk with a 500.
         logger.warning("get_queue: transient error for tier %d: %s", tier_level, exc)
         rows = []
+
+    # Also fetch complaints assigned directly to this agent at other tiers
+    # (e.g. escalated to tier 5 while agent's default tier is 4).
+    try:
+        assigned_elsewhere = (
+            supabase.table("agent_queue")
+            .select("*")
+            .eq("assigned_to", agent_id)
+            .in_("status", statuses)
+            .neq("tier_level", tier_level)
+            .order("priority_score", desc=True)
+            .execute()
+        )
+        existing_ids = {r["complaint_id"] for r in rows}
+        for r in (assigned_elsewhere.data or []):
+            if r["complaint_id"] not in existing_ids:
+                rows.append(r)
+                existing_ids.add(r["complaint_id"])
+    except Exception as exc:
+        logger.warning("get_queue: cross-tier fetch failed for %s: %s", agent_id, exc)
 
     complaint_ids = [r["complaint_id"] for r in rows]
     complaints_meta: dict = {}
@@ -152,7 +170,7 @@ def get_queue(
             "sla_deadline":         sla_raw,
             "category":             meta.get("category"),
             "severity":             severity,
-            "tier":                 tier_level,
+            "tier":                 row.get("tier_level", tier_level),
             "estimated_review_time": f"{row.get('estimated_review_time', 12)} min",
         })
 

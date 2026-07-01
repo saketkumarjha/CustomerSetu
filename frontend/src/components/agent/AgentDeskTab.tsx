@@ -904,10 +904,26 @@ export function AgentDeskTab() {
     refetchQueue();
   };
 
-  const myCases =
-    waitingList?.complaints.filter((c) => c.assigned_to === staffId) ?? [];
-  const otherCases =
-    waitingList?.complaints.filter((c) => c.assigned_to !== staffId) ?? [];
+  const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const applyFilters = (list: AgentQueueItem[]) =>
+    list.filter((c) => {
+      const sevOk =
+        severityFilter === "all" ||
+        (c.priority ?? "").toLowerCase() === severityFilter;
+      const stOk =
+        statusFilter === "all" ||
+        (c.queue_status ?? "").toLowerCase() === statusFilter;
+      return sevOk && stOk;
+    });
+
+  const myCases = applyFilters(
+    waitingList?.complaints.filter((c) => c.assigned_to === staffId) ?? [],
+  );
+  const otherCases = applyFilters(
+    waitingList?.complaints.filter((c) => c.assigned_to !== staffId) ?? [],
+  );
 
   const tableHeader = (
     <thead>
@@ -1185,6 +1201,43 @@ export function AgentDeskTab() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Queue filter bar */}
+      <div className="bg-white rounded-2xl border border-gray-100 px-5 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-gray-500 font-medium">Filter queue:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-sky-300"
+          >
+            <option value="all">All Status</option>
+            <option value="queued">Waiting</option>
+            <option value="assigned">Assigned</option>
+            <option value="in_review">In Review</option>
+          </select>
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-sky-300"
+          >
+            <option value="all">All Severity</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          {(severityFilter !== "all" || statusFilter !== "all") && (
+            <button
+              type="button"
+              onClick={() => { setSeverityFilter("all"); setStatusFilter("all"); }}
+              className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+            >
+              <X size={11} /> Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* My assigned cases */}

@@ -122,10 +122,13 @@ def mark_escalation_complete(
     final_route: str,
 ) -> None:
     supabase = get_supabase()
-    supabase.table("complaints").update({
+    payload: dict = {
         "is_escalating": False,
         "current_tier": final_tier,
-    }).eq("complaint_id", complaint_id).execute()
+    }
+    if final_route == "auto_respond":
+        payload["status"] = "resolved"
+    supabase.table("complaints").update(payload).eq("complaint_id", complaint_id).execute()
 
 
 def mark_escalation_failed(

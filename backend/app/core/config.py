@@ -97,6 +97,7 @@ class Settings(BaseSettings):
         2: ["Shubham"],
         3: ["Shubham Kumar"],
         4: ["Sarthak"],
+        5: ["Sarthak"],
     }
 
     # Agent specialisation map
